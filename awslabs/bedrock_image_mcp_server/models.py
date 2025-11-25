@@ -1,0 +1,44 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Pydantic models for Amazon Nova Canvas image generation.
+
+DEPRECATED: This module is maintained for backward compatibility.
+New code should import from awslabs.bedrock_image_mcp_server.models.nova_models instead.
+"""
+
+# Import all models from nova_models for backward compatibility
+from awslabs.bedrock_image_mcp_server.models.nova_models import (
+    ColorGuidedGenerationParams,
+    ColorGuidedRequest,
+    ImageGenerationConfig,
+    ImageGenerationResponse,
+    McpImageGenerationResponse,
+    Quality,
+    TaskType,
+    TextImageRequest,
+    TextToImageParams,
+)
+
+
+__all__ = [
+    'Quality',
+    'TaskType',
+    'ImageGenerationConfig',
+    'TextToImageParams',
+    'ColorGuidedGenerationParams',
+    'TextImageRequest',
+    'ColorGuidedRequest',
+    'McpImageGenerationResponse',
+    'ImageGenerationResponse',
+]
