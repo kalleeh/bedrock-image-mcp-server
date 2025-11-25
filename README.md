@@ -1,5 +1,10 @@
 # Amazon Bedrock Image Generation MCP Server
 
+[![PyPI version](https://badge.fury.io/py/bedrock-image-mcp-server.svg)](https://badge.fury.io/py/bedrock-image-mcp-server)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub Actions](https://github.com/kalleeh/bedrock-image-mcp-server/workflows/Publish%20to%20PyPI/badge.svg)](https://github.com/kalleeh/bedrock-image-mcp-server/actions)
+
 > **Note:** This is a community-maintained fork of [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) with additional features and improvements. Original work by Amazon Web Services under Apache 2.0 license.
 
 MCP server for generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
