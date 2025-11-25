@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-11-25
+
+### Changed
+- Forked from [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) v1.0.8
+- Reset version to 0.1.0 to indicate community fork
+- Updated licensing documentation to properly acknowledge original work
+- Fixed test dependencies being in main dependencies (moved to dev group)
+
+### Note
+This is a community-maintained fork with additional features and improvements.
+Original work by Amazon Web Services under Apache 2.0 license.
+
+---
+
+## Original awslabs/mcp Changelog
+
 ## [2.0.0] - 2025-11-24
 
 ### Added

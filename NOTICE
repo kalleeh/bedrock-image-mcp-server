@@ -1,2 +1,8 @@
-awslabs.nova-canvas-mcp-server
+bedrock-image-mcp-server
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This is a derivative work based on awslabs/mcp/bedrock-image-mcp-server
+Original source: https://github.com/awslabs/mcp
+
+Modifications and enhancements by Karl Wallbom and contributors.
+Fork maintained at: https://github.com/kalleeh/bedrock-image-mcp-server

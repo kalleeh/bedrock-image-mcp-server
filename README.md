@@ -1,6 +1,6 @@
 # Amazon Bedrock Image Generation MCP Server
 
-[![smithery badge](https://smithery.ai/badge/bedrock-image-mcp-server)](https://smithery.ai/server/bedrock-image-mcp-server)
+> **Note:** This is a community-maintained fork of [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) with additional features and improvements. Original work by Amazon Web Services under Apache 2.0 license.
 
 MCP server for generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
 

@@ -14,13 +14,13 @@
 """Tests for mask creation utilities."""
 
 import pytest
-from PIL import Image
-from io import BytesIO
 from awslabs.bedrock_image_mcp_server.utils.image_utils import (
-    create_rectangular_mask,
     create_ellipse_mask,
     create_full_mask,
+    create_rectangular_mask,
 )
+from io import BytesIO
+from PIL import Image
 
 
 class TestRectangularMask:
