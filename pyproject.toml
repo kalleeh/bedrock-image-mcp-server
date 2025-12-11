@@ -1,6 +1,6 @@
 [project]
 name = "bedrock-image-mcp-server"
-version = "0.1.0"
+version = "0.1.1"
 description = "Model Context Protocol (MCP) server for Amazon Bedrock image generation (Community Fork)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -51,6 +51,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=4.1.0",
     "ruff>=0.11.2",
+    "twine>=6.2.0",
 ]
 
 [build-system]
@@ -100,7 +101,7 @@ docstring-code-format = true
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version = "0.1.1"
 tag_format = "v$version"
 version_files = [
     "pyproject.toml:version",
