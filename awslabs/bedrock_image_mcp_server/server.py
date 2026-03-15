@@ -251,6 +251,10 @@ async def mcp_generate_image(
         default=DEFAULT_NUMBER_OF_IMAGES,
         description='The number of images to generate (1-5)',
     ),
+    style: Optional[str] = Field(
+        default=None,
+        description='Visual style preset: "3D_ANIMATED_FAMILY_FILM", "DESIGN_SKETCH", "FLAT_VECTOR_ILLUSTRATION", "GRAPHIC_NOVEL_ILLUSTRATION", "MAXIMALISM", "MIDCENTURY_RETRO", "PHOTOREALISM", "SOFT_DIGITAL_PAINTING"',
+    ),
     workspace_dir: Optional[str] = Field(
         default=None,
         description="""The current workspace directory where the image should be saved.
@@ -310,6 +314,7 @@ async def mcp_generate_image(
             seed=seed,
             number_of_images=number_of_images,
             workspace_dir=workspace_dir,
+            style=style,
         )
 
         if response.status == 'success':

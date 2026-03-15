@@ -33,6 +33,7 @@ from awslabs.bedrock_image_mcp_server.models.nova_models import (
     ColorGuidedRequest,
     ImageGenerationConfig,
     ImageGenerationResponse,
+    ImageStyle,
     Quality,
     TextImageRequest,
     TextToImageParams,
@@ -63,6 +64,7 @@ async def generate_image_with_text(
     seed: Optional[int] = None,
     number_of_images: int = DEFAULT_NUMBER_OF_IMAGES,
     workspace_dir: Optional[str] = None,
+    style: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Generate an image using Amazon Nova Canvas with text prompt.
 
@@ -116,10 +118,11 @@ async def generate_image_with_text(
             )
 
             # Create text-to-image params
+            style_enum = ImageStyle(style) if style else None
             if negative_prompt is not None:
-                text_params = TextToImageParams(text=prompt, negativeText=negative_prompt)
+                text_params = TextToImageParams(text=prompt, negativeText=negative_prompt, style=style_enum)
             else:
-                text_params = TextToImageParams(text=prompt)
+                text_params = TextToImageParams(text=prompt, style=style_enum)
 
             # Create the full request
             request_model = TextImageRequest(

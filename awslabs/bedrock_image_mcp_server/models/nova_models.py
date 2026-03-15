@@ -114,6 +114,22 @@ class ImageGenerationConfig(BaseModel):
         return self
 
 
+class ImageStyle(str, Enum):
+    """Visual style presets for Nova Canvas image generation.
+
+    See: https://docs.aws.amazon.com/nova/latest/userguide/image-gen-styles.html
+    """
+
+    THREE_D_ANIMATED_FAMILY_FILM = '3D_ANIMATED_FAMILY_FILM'
+    DESIGN_SKETCH = 'DESIGN_SKETCH'
+    FLAT_VECTOR_ILLUSTRATION = 'FLAT_VECTOR_ILLUSTRATION'
+    GRAPHIC_NOVEL_ILLUSTRATION = 'GRAPHIC_NOVEL_ILLUSTRATION'
+    MAXIMALISM = 'MAXIMALISM'
+    MIDCENTURY_RETRO = 'MIDCENTURY_RETRO'
+    PHOTOREALISM = 'PHOTOREALISM'
+    SOFT_DIGITAL_PAINTING = 'SOFT_DIGITAL_PAINTING'
+
+
 class TextToImageParams(BaseModel):
     """Parameters for text-to-image generation.
 
@@ -122,10 +138,12 @@ class TextToImageParams(BaseModel):
     Attributes:
         text: The text description of the image to generate (1-1024 characters).
         negativeText: Optional text to define what not to include in the image (1-1024 characters).
+        style: Optional visual style preset for the generated image.
     """
 
     text: str = Field(..., min_length=1, max_length=1024)
     negativeText: Optional[str] = Field(default=None, min_length=1, max_length=1024)
+    style: Optional[ImageStyle] = Field(default=None)
 
 
 class ColorGuidedGenerationParams(BaseModel):
@@ -191,9 +209,11 @@ class TextImageRequest(BaseModel):
             A dictionary representation of the model suitable for API requests.
         """
         text_to_image_params = self.textToImageParams.model_dump()
-        # Remove negativeText if it's None
+        # Remove optional None fields
         if text_to_image_params.get('negativeText') is None:
             text_to_image_params.pop('negativeText', None)
+        if text_to_image_params.get('style') is None:
+            text_to_image_params.pop('style', None)
 
         return {
             'taskType': self.taskType,
