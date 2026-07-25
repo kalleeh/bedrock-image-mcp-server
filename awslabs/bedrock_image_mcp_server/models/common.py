@@ -13,10 +13,8 @@
 # limitations under the License.
 """Common models and enums shared across all Bedrock image generation services."""
 
-import base64
-import os
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 
 
@@ -95,44 +93,3 @@ class ImageGenerationResponse(BaseModel):
     prompt: Optional[str] = None
     seed: Optional[int] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class BaseImageInput(BaseModel):
-    """Base model for image inputs supporting both base64 and file paths.
-
-    This model validates image inputs and provides a consistent interface
-    for handling images from different sources.
-
-    Attributes:
-        image: Either a base64-encoded image string or a file path to an image.
-    """
-
-    image: str
-
-    @field_validator('image')
-    @classmethod
-    def validate_image_input(cls, v: str) -> str:
-        """Validate that the image is either valid base64 or an existing file path.
-
-        Args:
-            v: The image string to validate (base64 or file path).
-
-        Returns:
-            The validated image string.
-
-        Raises:
-            ValueError: If the image is neither valid base64 nor an existing file.
-        """
-        # Check if it's a file path
-        if os.path.exists(v):
-            return v
-
-        # Check if it's valid base64
-        try:
-            # Try to decode as base64
-            base64.b64decode(v, validate=True)
-            return v
-        except Exception:
-            raise ValueError(
-                'Image must be either a valid base64-encoded string or an existing file path'
-            )

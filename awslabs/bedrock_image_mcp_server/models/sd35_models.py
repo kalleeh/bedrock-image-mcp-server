@@ -18,6 +18,7 @@ text-to-image and image-to-image generation.
 """
 
 import base64
+from awslabs.bedrock_image_mcp_server.consts import MAX_PROMPT_LENGTH_SD35, SD35_MAX_SEED
 from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
 from enum import Enum
 from io import BytesIO
@@ -78,10 +79,10 @@ class SD35TextToImageParams(BaseModel):
         output_format: Output image format (jpeg, png, or webp).
     """
 
-    prompt: str = Field(..., min_length=1, max_length=10000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
     aspect_ratio: AspectRatio = AspectRatio.RATIO_1_1
-    seed: int = Field(default=0, ge=0, le=4294967294)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -100,11 +101,11 @@ class SD35ImageToImageParams(BaseModel):
         output_format: Output image format (jpeg, png, or webp).
     """
 
-    prompt: str = Field(..., min_length=1, max_length=10000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
     image: str  # base64 encoded
     strength: float = Field(..., ge=0.0, le=1.0)
-    seed: int = Field(default=0, ge=0, le=4294967294)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
     output_format: OutputFormat = OutputFormat.PNG
 
     @field_validator('image')
@@ -130,14 +131,13 @@ class SD35ImageToImageParams(BaseModel):
             # Check if it's a file path
             if os.path.exists(v):
                 # Load from file
-                image = Image.open(v)
+                with Image.open(v) as image:
+                    width, height = image.size
             else:
                 # Assume it's base64
                 image_data = base64.b64decode(v)
-                image = Image.open(BytesIO(image_data))
-
-            # Get dimensions
-            width, height = image.size
+                with Image.open(BytesIO(image_data)) as image:
+                    width, height = image.size
 
             # Validate minimum dimensions
             if width < 64 or height < 64:

@@ -104,7 +104,7 @@ class TestSD35TextToImageParams:
         # Valid: exactly 10,000 characters
         long_negative = 'b' * 10000
         params = SD35TextToImageParams(prompt='test', negative_prompt=long_negative)
-        assert len(params.negative_prompt) == 10000
+        assert params.negative_prompt == long_negative
 
         # Invalid: 10,001 characters
         with pytest.raises(ValidationError) as exc_info:

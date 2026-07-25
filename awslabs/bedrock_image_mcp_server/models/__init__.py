@@ -28,9 +28,7 @@ from awslabs.bedrock_image_mcp_server.models.nova_models import (
 
 # Export common models
 from awslabs.bedrock_image_mcp_server.models.common import (
-    BaseImageInput,
     BedrockModelId,
-    ImageGenerationResponse as CommonImageGenerationResponse,
     OutputFormat,
 )
 
@@ -49,6 +47,4 @@ __all__ = [
     # Common models
     'OutputFormat',
     'BedrockModelId',
-    'BaseImageInput',
-    'CommonImageGenerationResponse',
 ]
