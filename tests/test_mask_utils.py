@@ -13,11 +13,13 @@
 # limitations under the License.
 """Tests for mask creation utilities."""
 
+import base64
 import pytest
 from awslabs.bedrock_image_mcp_server.utils.image_utils import (
     create_ellipse_mask,
     create_full_mask,
     create_rectangular_mask,
+    decode_base64_image,
 )
 from io import BytesIO
 from PIL import Image
@@ -162,3 +164,56 @@ class TestFullMask:
         """Test that invalid dimensions raise ValueError."""
         with pytest.raises(ValueError, match='must be positive'):
             create_full_mask(width=-1, height=100)
+
+
+class TestMaskSizeLimits:
+    """Tests that mask builders refuse sizes large enough to exhaust memory."""
+
+    @pytest.mark.parametrize(
+        'build',
+        [
+            lambda: create_rectangular_mask(20000, 20000, 0, 0, 10, 10),
+            lambda: create_ellipse_mask(20000, 20000, 100, 100, 10, 10),
+            lambda: create_full_mask(20000, 20000),
+        ],
+    )
+    def test_oversized_masks_are_rejected(self, build):
+        """Test a 400-megapixel mask raises instead of allocating hundreds of megabytes."""
+        with pytest.raises(ValueError, match='exceeds the maximum'):
+            build()
+
+    def test_reasonable_masks_still_build(self):
+        """Test a normal mask size is unaffected by the limit."""
+        assert create_full_mask(1024, 1024)
+
+
+class TestDecodeBase64Image:
+    """Tests for base64 decoding of caller-supplied image data."""
+
+    def test_plain_base64_round_trips(self):
+        """Test standard unwrapped base64 decodes to the original bytes."""
+        assert decode_base64_image(base64.b64encode(b'payload').decode('utf-8')) == b'payload'
+
+    def test_line_wrapped_base64_is_accepted(self):
+        """Test 76-column wrapped base64 with a trailing newline still decodes."""
+        wrapped = base64.encodebytes(b'p' * 200).decode('utf-8')
+        assert '\n' in wrapped
+        assert decode_base64_image(wrapped) == b'p' * 200
+
+    def test_crlf_wrapped_base64_is_accepted(self):
+        """Test base64 wrapped with CRLF line endings still decodes."""
+        wrapped = base64.encodebytes(b'p' * 200).decode('utf-8').replace('\n', '\r\n')
+        assert decode_base64_image(wrapped) == b'p' * 200
+
+    @pytest.mark.parametrize(
+        'bad',
+        [
+            'not base64 and not a path',
+            'aGVsbG8*d29ybGQ=',
+            'aGVsbG8!!!=',
+        ],
+    )
+    def test_corrupt_data_is_rejected_rather_than_truncated(self, bad):
+        """Test invalid characters raise instead of silently decoding partial data."""
+        with pytest.raises(ValueError, match='Failed to decode base64 image'):
+            decode_base64_image(bad)

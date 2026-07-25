@@ -41,6 +41,7 @@ DEFAULT_QUALITY = 'standard'
 DEFAULT_CFG_SCALE = 6.5
 DEFAULT_NUMBER_OF_IMAGES = 1
 DEFAULT_OUTPUT_DIR = 'output'  # Default directory inside workspace_dir
+MAX_FILENAME_LENGTH = 100  # Leaves room for the random suffix and extension within NAME_MAX
 
 # SD3.5 defaults
 DEFAULT_SD35_ASPECT_RATIO = '1:1'
@@ -52,7 +53,6 @@ NOVA_MAX_SEED = 858993459
 
 # Upscale defaults
 DEFAULT_CREATIVE_UPSCALE_CREATIVITY = 0.3
-DEFAULT_CONSERVATIVE_UPSCALE_CREATIVITY = 0.35
 DEFAULT_OUTPUT_FORMAT = 'png'
 
 # Edit service defaults
@@ -69,6 +69,7 @@ DEFAULT_CHANGE_STRENGTH = 0.9
 
 # Pixel constraint constants
 MIN_IMAGE_DIMENSION = 64
+MAX_DECODED_IMAGE_PIXELS = 67108864  # 64 megapixels; guards against decompression bombs
 MAX_CREATIVE_UPSCALE_INPUT_PIXELS = 1048576  # 1 megapixel
 MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS = 9437184  # ~9.4 megapixels
 MAX_FAST_UPSCALE_INPUT_PIXELS = 1048576  # 1 megapixel
