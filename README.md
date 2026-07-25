@@ -12,16 +12,43 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 
 ## Which model should I use?
 
-For general text-to-image, use **`generate_image_sd35`** (Stable Diffusion 3.5 Large). It
-has noticeably better prompt adherence and output quality, and accepts prompts up to 10,000
-characters. Reach for the Nova Canvas tools when you need something only Nova offers:
-explicit pixel dimensions, a color palette, Nova style presets, or several images per request.
+Three Stability AI text-to-image models form a quality ladder, all in us-west-2:
+
+| Tool | Model | Use it for |
+|---|---|---|
+| `generate_image_core` | Stable Image Core | Drafts, iteration, several concepts at once. Fastest and cheapest. |
+| `generate_image_sd35` | Stable Diffusion 3.5 Large | A good general default. Balanced quality and cost. |
+| `generate_image_ultra` | Stable Image Ultra | Final assets and anything with legible text. Highest quality. |
+
+All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
+Reach for the Nova Canvas tools only for something they cannot do: explicit pixel dimensions,
+a color palette, Nova style presets, or several images per request — and note that Nova Canvas
+is [retiring on 2026-09-30](#nova-canvas-is-retiring).
+
+For image-to-image, `transform_image_sd35` is the only option of the four; Ultra and Core are
+text-to-image only.
+
+**On seeds:** a fixed non-zero `seed` reproduces the same image reliably within a short window
+(verified 6/6 identical), but is best-effort rather than guaranteed — repeats separated by
+longer intervals occasionally differ, which appears to be Bedrock serving the request from a
+different backend. Use `seed=0` for explicitly random output.
 
 ## Features
 
-### Stable Diffusion 3.5 Large (2 tools) — recommended for text-to-image
+### Stability AI Text-to-Image (4 tools) — recommended
 
-#### Text-to-image generation
+#### Highest quality
+- Generate images with `generate_image_ultra` (Stable Image Ultra)
+- Stability AI's flagship model: best photorealism, lighting and legible text
+- Same aspect ratios and prompt length as SD3.5; higher cost per image
+- Text-to-image only, `png` or `jpeg` output (no webp)
+
+#### Fastest and cheapest
+- Generate images with `generate_image_core` (Stable Image Core)
+- Lowest cost and latency; ideal for drafts and iterating on concepts
+- Text-to-image only, `png` or `jpeg` output (no webp)
+
+#### Balanced text-to-image generation
 - Generate images from text prompts with `generate_image_sd35`
 - Supports prompts up to 10,000 characters (vs 1,024 for Nova Canvas)
 - 9 aspect ratio options: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21
@@ -274,11 +301,29 @@ Make sure the AWS profile has permissions to access Amazon Bedrock and the image
 
 ## Usage Examples
 
-### Stable Diffusion 3.5 Large (start here)
+### Stability AI Text-to-Image (start here)
 
-#### Text-to-Image
+#### Highest quality
 ```python
-# The recommended default for text-to-image
+# Stable Image Ultra: final assets, best text rendering
+generate_image_ultra(
+    prompt="A weathered brass compass on an antique nautical chart, macro photo",
+    aspect_ratio="3:2",
+    output_format="png"   # png or jpeg only; webp is not supported
+)
+```
+
+#### Fastest draft
+```python
+# Stable Image Core: quick concepts to iterate on
+generate_image_core(
+    prompt="Three flat vector logo concepts for a coffee shop",
+    aspect_ratio="1:1"
+)
+```
+
+#### Balanced default
+```python
 generate_image_sd35(
     prompt="A serene mountain landscape at sunset",
     aspect_ratio="1:1"
@@ -510,16 +555,17 @@ them**. Pick your `AWS_REGION` based on which tools you need.
 
 | Tools | Regions | Lifecycle |
 |---|---|---|
-| `generate_image_sd35`, `transform_image_sd35` (SD3.5 Large) | **us-west-2 only** | Active |
+| `generate_image_ultra`, `generate_image_core`, `generate_image_sd35`, `transform_image_sd35` | **us-west-2 only** | Active |
 | The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 | Active |
 | `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 | **Legacy — EOL 2026-09-30** |
 
 Practical consequences:
 
-- **us-west-2** is the only region where SD3.5 works, and it also covers all 13 Stability
-  tools — so it is the best single choice for the recommended SD3.5-first workflow. Nova
-  Canvas is *not* available there.
-- **us-east-1** covers Nova Canvas plus the 13 Stability tools, but not SD3.5.
+- **us-west-2** is the only region where Ultra, Core and SD3.5 work, and it also covers all 13
+  Stability edit/upscale/control tools — so it is the best single choice. Nova Canvas is *not*
+  available there.
+- **us-east-1** covers Nova Canvas plus the 13 Stability tools, but none of the three
+  text-to-image models.
 - If you need both SD3.5 and Nova Canvas, you will need to run two server instances with
   different `AWS_REGION` values.
 

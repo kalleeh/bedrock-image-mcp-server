@@ -37,7 +37,9 @@ from awslabs.bedrock_image_mcp_server.server import (
     mcp_create_ellipse_mask,
     mcp_create_full_mask,
     mcp_create_rectangular_mask,
+    mcp_generate_image_core,
     mcp_generate_image_sd35,
+    mcp_generate_image_ultra,
     mcp_inpaint,
     mcp_outpaint,
     mcp_remove_background,
@@ -124,6 +126,32 @@ TOOL_KWARGS = {
             'negative_prompt': 'blurry',
             'seed': 42,
             'output_format': 'png',
+            'filename': None,
+            'workspace_dir': None,
+        },
+    ),
+    'generate_image_ultra': (
+        mcp_generate_image_ultra,
+        'generate_image_ultra',
+        {
+            'prompt': 'a brass compass on a nautical chart',
+            'aspect_ratio': '3:2',
+            'negative_prompt': 'blurry',
+            'seed': 11,
+            'output_format': 'png',
+            'filename': None,
+            'workspace_dir': None,
+        },
+    ),
+    'generate_image_core': (
+        mcp_generate_image_core,
+        'generate_image_core',
+        {
+            'prompt': 'three logo concepts, flat vector',
+            'aspect_ratio': '1:1',
+            'negative_prompt': None,
+            'seed': 12,
+            'output_format': 'jpeg',
             'filename': None,
             'workspace_dir': None,
         },
@@ -438,7 +466,8 @@ class TestSharedToolContract:
         """Test that an uppercase output_format is accepted and lowercased to the enum."""
         _, params, _ = await invoke_success(tool_name, mock_context, output_format='PNG')
 
-        assert params.output_format is OutputFormat.PNG
+        # Ultra and Core use a narrower format enum, so compare the value not the member.
+        assert params.output_format.value == OutputFormat.PNG.value
         mock_context.error.assert_not_called()
 
     @pytest.mark.parametrize('tool_name', FORMAT_TOOLS)
