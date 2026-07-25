@@ -26,6 +26,8 @@ from awslabs.bedrock_image_mcp_server.consts import (
     DEFAULT_OUTPUT_DIR,
     MAX_FILENAME_LENGTH,
     MIN_IMAGE_DIMENSION,
+    NOVA_CANVAS_EOL_DATE,
+    NOVA_CANVAS_MODEL_ID,
 )
 from awslabs.bedrock_image_mcp_server.models.common import ImageGenerationResponse, OutputFormat
 from awslabs.bedrock_image_mcp_server.utils.image_utils import (
@@ -84,6 +86,31 @@ class ContentFilterError(BedrockAPIError):
         super().__init__(
             message=f'Content filtered: {reason}', error_code='ContentFiltered', retryable=False
         )
+
+
+def describe_model_not_found(model_id: str, error_message: str) -> str:
+    """Build an actionable message for a model that Bedrock could not resolve.
+
+    Args:
+        model_id: The Bedrock model ID that was invoked.
+        error_message: The message AWS returned.
+
+    Returns:
+        The AWS message plus guidance on the likely cause and the migration path.
+    """
+    if 'Legacy' in error_message and model_id == NOVA_CANVAS_MODEL_ID:
+        return (
+            f'{error_message} AWS has marked Nova Canvas as a Legacy model with end-of-life '
+            f'on {NOVA_CANVAS_EOL_DATE}, and revokes access after 15 days of inactivity. '
+            f'Use generate_image_sd35 (Stable Diffusion 3.5 Large, in us-west-2) instead, or '
+            f're-request Nova Canvas access in the Bedrock console.'
+        )
+    return (
+        f'{error_message} Model {model_id} could not be resolved. Check that it is available '
+        f'in the configured AWS_REGION: SD3.5 is us-west-2 only, the Stability AI services are '
+        f'in us-east-1/us-east-2/us-west-2, and Nova Canvas is in '
+        f'us-east-1/eu-west-1/ap-northeast-1.'
+    )
 
 
 def sanitize_filename(name: str, fallback: str) -> str:
@@ -379,6 +406,12 @@ async def invoke_bedrock_model(
             raise BedrockAPIError(
                 message=f'Access denied. Check IAM permissions for model {model_id}. '
                 f"Ensure you have 'bedrock:InvokeModel' permission and model access is enabled.",
+                error_code=error_code,
+                retryable=False,
+            )
+        elif error_code == 'ResourceNotFoundException':
+            raise BedrockAPIError(
+                message=describe_model_not_found(model_id, error_message),
                 error_code=error_code,
                 retryable=False,
             )

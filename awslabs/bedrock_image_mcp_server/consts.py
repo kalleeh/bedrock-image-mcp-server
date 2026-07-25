@@ -15,6 +15,9 @@
 NOVA_CANVAS_MODEL_ID = 'amazon.nova-canvas-v1:0'
 SD35_LARGE_MODEL_ID = 'stability.sd3-5-large-v1:0'
 
+# AWS marked Nova Canvas Legacy on 2026-03-30; it stops serving requests after this date.
+NOVA_CANVAS_EOL_DATE = '2026-09-30'
+
 # Stability AI Upscale Model IDs
 STABLE_UPSCALE_CREATIVE_MODEL_ID = 'us.stability.stable-creative-upscale-v1:0'
 STABLE_UPSCALE_CONSERVATIVE_MODEL_ID = 'us.stability.stable-conservative-upscale-v1:0'

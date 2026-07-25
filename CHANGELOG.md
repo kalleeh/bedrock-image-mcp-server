@@ -24,10 +24,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported `unhealthy` forever.
 - `__init__.py` was left at 0.1.0 when the project bumped to 0.1.1.
 
+### Deprecated
+- **`generate_image` and `generate_image_with_colors` (Amazon Nova Canvas).** AWS marked Nova
+  Canvas as a Legacy model on 2026-03-30 and retires it on **2026-09-30**, after which both tools
+  will stop working. AWS also revokes Legacy model access after 15 days of inactivity and blocks
+  new customers entirely.
+  - Use **`generate_image_sd35`** (Stable Diffusion 3.5 Large, us-west-2) instead. It has better
+    prompt adherence and is an Active model.
+  - `generate_image_with_colors` has no direct replacement; describe the desired colours in the
+    prompt to `generate_image_sd35`.
+  - Nova-only parameters with no SD3.5 equivalent: `width`, `height`, `quality`, `cfg_scale`,
+    `number_of_images`, `style`. SD3.5 uses `aspect_ratio` and `output_format` instead.
+  - Both tools still work unchanged in this release. Nothing has been renamed or repointed.
+
+### Compatibility policy
+`generate_image` will **not** be silently repointed at a different model. Six of its eleven
+parameters have no SD3.5 equivalent, so swapping the model behind the existing name would accept
+calls and then quietly ignore the dimensions, quality and image count the caller asked for. The
+Nova tools instead keep their current behaviour until the AWS end-of-life date and will then be
+removed in a major release. New capabilities arrive as new tool names.
+
 ### Security
 - Added a decode limit for untrusted images and a size cap on generated masks, so oversized input
   can no longer exhaust memory.
 - Base64 image data is now validated rather than silently truncated on corrupt input.
+- `ResourceNotFoundException` now explains the likely cause instead of surfacing the raw AWS
+  message: either the Nova Canvas Legacy retirement, naming the replacement tool, or which
+  regions carry the requested model family.
 
 ### Changed
 - Blocking Bedrock calls, image decoding and image writing now run on worker threads, keeping the

@@ -191,9 +191,9 @@ identifier, the model is not available in the configured AWS_REGION.
 - **generate_image_sd35**: Generate an image from a text prompt using Stable Diffusion 3.5 Large.
 - **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance.
 
-### Amazon Nova Canvas Tools
-- **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas. Prefer generate_image_sd35 unless you need Nova-specific controls.
-- **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas.
+### Amazon Nova Canvas Tools (DEPRECATED — retires 2026-09-30)
+- **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas. Deprecated; prefer generate_image_sd35 unless you need explicit pixel dimensions, quality/cfg_scale tuning, Nova style presets, or several images per request.
+- **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas. Deprecated; no direct replacement, so describe the colours in a generate_image_sd35 prompt instead.
 
 ### Stability AI Upscale Tools
 - **upscale_creative**: Upscale images to 4K with creative AI enhancement (20-40x upscale).
@@ -348,15 +348,17 @@ async def mcp_generate_image(
         CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
     ),
 ) -> McpImageGenerationResponse:
-    """Generate an image using Amazon Nova Canvas with text prompt.
+    """DEPRECATED. Generate an image using Amazon Nova Canvas with text prompt.
 
     This tool uses Amazon Nova Canvas to generate images based on a text prompt.
     The generated image will be saved to a file and the path will be returned.
 
-    PREFER generate_image_sd35 for general text-to-image work: Stable Diffusion 3.5 Large
-    gives noticeably better prompt adherence and image quality. Use this Nova Canvas tool
-    when you specifically need Nova features — explicit width/height control, style presets,
-    quality/cfg_scale tuning, or multiple images per request.
+    DEPRECATED: AWS marked Nova Canvas as a Legacy model and retires it on 2026-09-30, after
+    which this tool will stop working. AWS also revokes access after 15 days of inactivity.
+    Use generate_image_sd35 (Stable Diffusion 3.5 Large, in us-west-2) instead, which also
+    gives noticeably better prompt adherence and image quality. Only use this tool when you
+    specifically need a Nova feature that SD3.5 lacks: explicit width/height in pixels,
+    quality/cfg_scale tuning, Nova style presets, or several images in one request.
 
     IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working
@@ -463,10 +465,14 @@ async def mcp_generate_image_with_colors(
         description="The current workspace directory where the image should be saved. CRITICAL: Assistant must always provide this parameter to save images to the user's current project.",
     ),
 ) -> McpImageGenerationResponse:
-    """Generate an image using Amazon Nova Canvas with color guidance.
+    """DEPRECATED. Generate an image using Amazon Nova Canvas with color guidance.
 
     This tool uses Amazon Nova Canvas to generate images based on a text prompt and color palette.
     The generated image will be saved to a file and the path will be returned.
+
+    DEPRECATED: AWS marked Nova Canvas as a Legacy model and retires it on 2026-09-30, after
+    which this tool will stop working. There is no direct replacement for colour-palette
+    guidance; describe the desired colours in the prompt to generate_image_sd35 instead.
 
     IMPORTANT FOR Assistant: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working

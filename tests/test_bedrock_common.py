@@ -17,6 +17,7 @@ import base64
 import json
 import os
 import pytest
+from awslabs.bedrock_image_mcp_server.consts import NOVA_CANVAS_EOL_DATE, NOVA_CANVAS_MODEL_ID
 from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     BedrockAPIError,
@@ -429,3 +430,49 @@ class TestBase64Whitespace:
                 filename_prefix='img',
                 output_format=OutputFormat.PNG,
             )
+
+
+class TestModelNotFoundGuidance:
+    """Tests for the guidance attached to unresolvable-model errors."""
+
+    async def test_nova_legacy_error_points_at_the_replacement(self):
+        """Test the Nova Canvas legacy failure names the EOL date and the replacement tool."""
+        client = _client_raising(
+            _client_error(
+                'ResourceNotFoundException',
+                'Access denied. This Model is marked by provider as Legacy and you have not '
+                'been actively using the model in the last 30 days.',
+            )
+        )
+
+        with pytest.raises(BedrockAPIError) as exc_info:
+            await invoke_bedrock_model(
+                model_id=NOVA_CANVAS_MODEL_ID,
+                request_body={'prompt': 'a cat'},
+                bedrock_client=client,
+            )
+
+        error = exc_info.value
+        assert error.error_code == 'ResourceNotFoundException'
+        assert error.retryable is False
+        assert 'generate_image_sd35' in error.message
+        assert NOVA_CANVAS_EOL_DATE in error.message
+
+    async def test_other_models_get_region_guidance(self):
+        """Test a non-Nova unresolvable model explains the per-model region split."""
+        client = _client_raising(
+            _client_error('ResourceNotFoundException', 'The provided model identifier is invalid.')
+        )
+
+        with pytest.raises(BedrockAPIError) as exc_info:
+            await invoke_bedrock_model(
+                model_id='stability.sd3-5-large-v1:0',
+                request_body={'prompt': 'a cat'},
+                bedrock_client=client,
+            )
+
+        message = exc_info.value.message
+        assert 'AWS_REGION' in message
+        assert 'us-west-2' in message
+        # Nova-specific migration advice must not leak onto unrelated models.
+        assert 'generate_image_sd35' not in message
