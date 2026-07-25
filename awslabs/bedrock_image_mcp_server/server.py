@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Nova Canvas MCP Server implementation."""
+"""Amazon Bedrock image generation MCP Server implementation."""
 
 import boto3
 import os
 import sys
+import uuid
 from awslabs.bedrock_image_mcp_server.consts import (
     BEDROCK_CONNECT_TIMEOUT,
     BEDROCK_MAX_POOL_CONNECTIONS,
@@ -31,6 +32,7 @@ from awslabs.bedrock_image_mcp_server.consts import (
     DEFAULT_HEIGHT,
     DEFAULT_NUMBER_OF_IMAGES,
     DEFAULT_OUTPAINT_CREATIVITY,
+    DEFAULT_OUTPUT_DIR,
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_QUALITY,
     DEFAULT_SD35_ASPECT_RATIO,
@@ -65,6 +67,10 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     StylePreset,
     StyleTransferParams,
 )
+from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    resolve_output_path,
+    sanitize_filename,
+)
 from awslabs.bedrock_image_mcp_server.services.nova_canvas import (
     generate_image_with_colors,
     generate_image_with_text,
@@ -91,6 +97,11 @@ from awslabs.bedrock_image_mcp_server.services.stability_upscale import (
     upscale_conservative,
     upscale_creative,
     upscale_fast,
+)
+from awslabs.bedrock_image_mcp_server.utils.image_utils import (
+    create_ellipse_mask,
+    create_full_mask,
+    create_rectangular_mask,
 )
 from botocore.config import Config
 from loguru import logger
@@ -135,39 +146,45 @@ try:
         bedrock_runtime_client = boto3.Session(
             profile_name=aws_profile, region_name=aws_region
         ).client('bedrock-runtime', config=retry_config)
-        logger.info(
-            f'Bedrock client initialized with AWS profile: {aws_profile}',
-            extra={'region': aws_region, 'profile': aws_profile},
-        )
+        logger.bind(
+            region=aws_region,
+            profile=aws_profile,
+        ).info(f'Bedrock client initialized with AWS profile: {aws_profile}')
     else:
         bedrock_runtime_client = boto3.Session(region_name=aws_region).client(
             'bedrock-runtime', config=retry_config
         )
-        logger.info(
-            'Bedrock client initialized with default credentials', extra={'region': aws_region}
-        )
+        logger.bind(region=aws_region).info('Bedrock client initialized with default credentials')
 except Exception as e:
-    logger.error(f'Error creating bedrock runtime client: {str(e)}', extra={'region': aws_region})
+    logger.bind(region=aws_region).error(f'Error creating bedrock runtime client: {str(e)}')
     raise
 
 
 # Create the MCP server with detailed instructions
 mcp = FastMCP(
-    'awslabs-nova-canvas-mcp-server',
+    'bedrock-image-mcp-server',
     instructions=f"""
 # Amazon Bedrock Image Generation
 
 This MCP server provides tools for generating images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
 
+## Choosing a text-to-image tool
+
+Prefer **generate_image_sd35** (Stable Diffusion 3.5 Large) for general text-to-image
+requests — it has noticeably better prompt adherence and output quality, and accepts
+prompts up to 10,000 characters. Use the Nova Canvas tools when you need something only
+Nova offers: explicit pixel width/height, a color palette, Nova style presets, or several
+images in one request.
+
 ## Available Tools
 
-### Amazon Nova Canvas Tools
-- **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas.
-- **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas.
-
-### Stable Diffusion 3.5 Large Tools
+### Stable Diffusion 3.5 Large Tools (preferred for text-to-image)
 - **generate_image_sd35**: Generate an image from a text prompt using Stable Diffusion 3.5 Large.
 - **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance.
+
+### Amazon Nova Canvas Tools
+- **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas. Prefer generate_image_sd35 unless you need Nova-specific controls.
+- **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas.
 
 ### Stability AI Upscale Tools
 - **upscale_creative**: Upscale images to 4K with creative AI enhancement (20-40x upscale).
@@ -210,6 +227,71 @@ This MCP server provides tools for generating images using Amazon Nova Canvas, S
         'boto3',
     ],
 )
+
+
+class ImageServiceError(Exception):
+    """Raised when a Bedrock image service reports a failed operation."""
+
+
+def parse_output_format(output_format: str) -> OutputFormat:
+    """Convert a caller-supplied format string to an OutputFormat.
+
+    Args:
+        output_format: Format name, case-insensitive (jpeg, png, or webp).
+
+    Returns:
+        The matching OutputFormat member.
+
+    Raises:
+        ValueError: If the format is not one of jpeg, png, or webp.
+    """
+    try:
+        return OutputFormat(output_format.lower())
+    except ValueError:
+        raise ValueError(
+            f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+        )
+
+
+def parse_aspect_ratio(aspect_ratio: str) -> AspectRatio:
+    """Convert a caller-supplied aspect ratio string to an AspectRatio.
+
+    Args:
+        aspect_ratio: Ratio name such as '16:9'.
+
+    Returns:
+        The matching AspectRatio member.
+
+    Raises:
+        ValueError: If the ratio is not one of the supported values.
+    """
+    try:
+        return AspectRatio(aspect_ratio)
+    except ValueError:
+        supported = ', '.join(ratio.value for ratio in AspectRatio)
+        raise ValueError(f'Invalid aspect ratio: {aspect_ratio}. Must be one of: {supported}')
+
+
+def write_mask(mask_bytes: bytes, filename: Optional[str], workspace_dir: Optional[str]) -> str:
+    """Write mask bytes to the workspace output directory.
+
+    Args:
+        mask_bytes: PNG-encoded mask data.
+        filename: Optional caller-supplied name (without extension).
+        workspace_dir: Directory to write into. If None, uses the current directory.
+
+    Returns:
+        Absolute path to the written mask file.
+    """
+    output_dir = (
+        os.path.join(workspace_dir, DEFAULT_OUTPUT_DIR) if workspace_dir else DEFAULT_OUTPUT_DIR
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    safe_name = sanitize_filename(filename or f'mask_{uuid.uuid4().hex[:8]}', 'mask')
+    mask_path = resolve_output_path(output_dir, f'{safe_name}.png')
+    with open(mask_path, 'wb') as f:
+        f.write(mask_bytes)
+    return mask_path
 
 
 @mcp.tool(name='generate_image')
@@ -261,6 +343,11 @@ async def mcp_generate_image(
 
     This tool uses Amazon Nova Canvas to generate images based on a text prompt.
     The generated image will be saved to a file and the path will be returned.
+
+    PREFER generate_image_sd35 for general text-to-image work: Stable Diffusion 3.5 Large
+    gives noticeably better prompt adherence and image quality. Use this Nova Canvas tool
+    when you specifically need Nova features — explicit width/height control, style presets,
+    quality/cfg_scale tuning, or multiple images per request.
 
     IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working
@@ -320,13 +407,10 @@ async def mcp_generate_image(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Image generation returned error status: {response.message}')
-            await ctx.error(f'Failed to generate image: {response.message}')  # type: ignore
-            # Return empty image or raise exception based on requirements
-            raise Exception(f'Failed to generate image: {response.message}')
+            raise ImageServiceError(f'Failed to generate image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image: {str(e)}')
-        await ctx.error(f'Error generating image: {str(e)}')  # type: ignore
+        await ctx.error(str(e))
         raise
 
 
@@ -432,14 +516,10 @@ async def mcp_generate_image_with_colors(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(
-                f'Color-guided image generation returned error status: {response.message}'
-            )
-            await ctx.error(f'Failed to generate color-guided image: {response.message}')
-            raise Exception(f'Failed to generate color-guided image: {response.message}')
+            raise ImageServiceError(f'Failed to generate color-guided image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_with_colors: {str(e)}')
-        await ctx.error(f'Error generating color-guided image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -475,11 +555,13 @@ async def mcp_generate_image_sd35(
         CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
     ),
 ) -> McpImageGenerationResponse:
-    """Generate an image using Stable Diffusion 3.5 Large with text prompt.
+    """Generate an image from a text prompt. PREFERRED for general text-to-image.
 
     This tool uses Stable Diffusion 3.5 Large to generate images based on a text prompt.
     SD3.5 offers superior prompt adherence and supports longer prompts (up to 10,000 characters)
-    compared to Nova Canvas.
+    compared to Nova Canvas, and is the recommended default for text-to-image generation.
+    Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
+    a color palette, or Nova-specific style presets.
 
     IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working
@@ -525,23 +607,8 @@ async def mcp_generate_image_sd35(
     )
 
     try:
-        # Validate and convert aspect ratio
-        try:
-            aspect_ratio_enum = AspectRatio(aspect_ratio)
-        except ValueError:
-            await ctx.error(
-                f'Invalid aspect ratio: {aspect_ratio}. Must be one of: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21'
-            )
-            raise ValueError(f'Invalid aspect ratio: {aspect_ratio}')
-
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        aspect_ratio_enum = parse_aspect_ratio(aspect_ratio)
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = SD35TextToImageParams(
@@ -567,12 +634,10 @@ async def mcp_generate_image_sd35(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'SD3.5 image generation returned error status: {response.message}')
-            await ctx.error(f'Failed to generate SD3.5 image: {response.message}')
-            raise Exception(f'Failed to generate SD3.5 image: {response.message}')
+            raise ImageServiceError(f'Failed to generate SD3.5 image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_sd35: {str(e)}')
-        await ctx.error(f'Error generating SD3.5 image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -677,14 +742,7 @@ async def mcp_transform_image_sd35(
     )
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = SD35ImageToImageParams(
@@ -711,12 +769,10 @@ async def mcp_transform_image_sd35(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'SD3.5 image transformation returned error status: {response.message}')
-            await ctx.error(f'Failed to transform image with SD3.5: {response.message}')
-            raise Exception(f'Failed to transform image with SD3.5: {response.message}')
+            raise ImageServiceError(f'Failed to transform image with SD3.5: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_transform_image_sd35: {str(e)}')
-        await ctx.error(f'Error transforming image with SD3.5: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -809,14 +865,7 @@ async def mcp_upscale_creative(
     )
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Validate and convert style preset if provided
         style_preset_enum = None
@@ -824,7 +873,6 @@ async def mcp_upscale_creative(
             try:
                 style_preset_enum = StylePreset(style_preset)
             except ValueError:
-                await ctx.error(f'Invalid style preset: {style_preset}')
                 raise ValueError(f'Invalid style preset: {style_preset}')
 
         # Create parameters model
@@ -853,12 +901,10 @@ async def mcp_upscale_creative(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Creative upscale returned error status: {response.message}')
-            await ctx.error(f'Failed to upscale image: {response.message}')
-            raise Exception(f'Failed to upscale image: {response.message}')
+            raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_creative: {str(e)}')
-        await ctx.error(f'Error upscaling image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -928,14 +974,7 @@ async def mcp_upscale_conservative(
     logger.debug('MCP tool upscale_conservative called')
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = ConservativeUpscaleParams(
@@ -961,12 +1000,10 @@ async def mcp_upscale_conservative(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Conservative upscale returned error status: {response.message}')
-            await ctx.error(f'Failed to upscale image: {response.message}')
-            raise Exception(f'Failed to upscale image: {response.message}')
+            raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_conservative: {str(e)}')
-        await ctx.error(f'Error upscaling image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1025,14 +1062,7 @@ async def mcp_upscale_fast(
     logger.debug('MCP tool upscale_fast called')
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = FastUpscaleParams(
@@ -1055,12 +1085,10 @@ async def mcp_upscale_fast(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Fast upscale returned error status: {response.message}')
-            await ctx.error(f'Failed to upscale image: {response.message}')
-            raise Exception(f'Failed to upscale image: {response.message}')
+            raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_fast: {str(e)}')
-        await ctx.error(f'Error upscaling image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1133,14 +1161,7 @@ async def mcp_inpaint(
     logger.debug(f"MCP tool inpaint_image called with prompt: '{prompt[:30]}...'")
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = InpaintParams(
@@ -1168,12 +1189,10 @@ async def mcp_inpaint(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Inpaint returned error status: {response.message}')
-            await ctx.error(f'Failed to inpaint image: {response.message}')
-            raise Exception(f'Failed to inpaint image: {response.message}')
+            raise ImageServiceError(f'Failed to inpaint image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_inpaint: {str(e)}')
-        await ctx.error(f'Error inpainting image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1260,14 +1279,7 @@ async def mcp_outpaint(
     logger.debug(f"MCP tool outpaint_image called with prompt: '{prompt[:30]}...'")
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = OutpaintParams(
@@ -1298,12 +1310,10 @@ async def mcp_outpaint(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Outpaint returned error status: {response.message}')
-            await ctx.error(f'Failed to outpaint image: {response.message}')
-            raise Exception(f'Failed to outpaint image: {response.message}')
+            raise ImageServiceError(f'Failed to outpaint image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_outpaint: {str(e)}')
-        await ctx.error(f'Error outpainting image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1389,14 +1399,7 @@ async def mcp_search_replace(
     logger.debug('MCP tool search_and_replace called')
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = SearchReplaceParams(
@@ -1423,12 +1426,10 @@ async def mcp_search_replace(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Search and replace returned error status: {response.message}')
-            await ctx.error(f'Failed to search and replace: {response.message}')
-            raise Exception(f'Failed to search and replace: {response.message}')
+            raise ImageServiceError(f'Failed to search and replace: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_search_replace: {str(e)}')
-        await ctx.error(f'Error in search and replace: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1515,14 +1516,7 @@ async def mcp_search_recolor(
     logger.debug('MCP tool search_and_recolor called')
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = SearchRecolorParams(
@@ -1549,12 +1543,10 @@ async def mcp_search_recolor(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Search and recolor returned error status: {response.message}')
-            await ctx.error(f'Failed to search and recolor: {response.message}')
-            raise Exception(f'Failed to search and recolor: {response.message}')
+            raise ImageServiceError(f'Failed to search and recolor: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_search_recolor: {str(e)}')
-        await ctx.error(f'Error in search and recolor: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1620,14 +1612,7 @@ async def mcp_remove_object(
     logger.debug('MCP tool remove_object called')
 
     try:
-        # Validate and convert output format
-        try:
-            output_format_enum = OutputFormat(output_format.lower())
-        except ValueError:
-            await ctx.error(
-                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
-            )
-            raise ValueError(f'Invalid output format: {output_format}')
+        output_format_enum = parse_output_format(output_format)
 
         # Create parameters model
         params = RemoveObjectParams(
@@ -1653,12 +1638,10 @@ async def mcp_remove_object(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Remove object returned error status: {response.message}')
-            await ctx.error(f'Failed to remove object: {response.message}')
-            raise Exception(f'Failed to remove object: {response.message}')
+            raise ImageServiceError(f'Failed to remove object: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_remove_object: {str(e)}')
-        await ctx.error(f'Error removing object: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1728,12 +1711,10 @@ async def mcp_remove_background(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Remove background returned error status: {response.message}')
-            await ctx.error(f'Failed to remove background: {response.message}')
-            raise Exception(f'Failed to remove background: {response.message}')
+            raise ImageServiceError(f'Failed to remove background: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_remove_background: {str(e)}')
-        await ctx.error(f'Error removing background: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1825,7 +1806,7 @@ async def mcp_sketch_to_image(
             control_strength=control_strength,
             negative_prompt=negative_prompt,
             seed=seed,
-            output_format=OutputFormat(output_format),
+            output_format=parse_output_format(output_format),
         )
 
         logger.info(f'Converting sketch to image with control_strength={control_strength}')
@@ -1843,12 +1824,10 @@ async def mcp_sketch_to_image(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Sketch to image returned error status: {response.message}')
-            await ctx.error(f'Failed to convert sketch: {response.message}')
-            raise Exception(f'Failed to convert sketch: {response.message}')
+            raise ImageServiceError(f'Failed to convert sketch: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_sketch_to_image: {str(e)}')
-        await ctx.error(f'Error converting sketch to image: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -1940,7 +1919,7 @@ async def mcp_structure_control(
             control_strength=control_strength,
             negative_prompt=negative_prompt,
             seed=seed,
-            output_format=OutputFormat(output_format),
+            output_format=parse_output_format(output_format),
         )
 
         logger.info(
@@ -1960,12 +1939,12 @@ async def mcp_structure_control(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Structure control returned error status: {response.message}')
-            await ctx.error(f'Failed to generate with structure control: {response.message}')
-            raise Exception(f'Failed to generate with structure control: {response.message}')
+            raise ImageServiceError(
+                f'Failed to generate with structure control: {response.message}'
+            )
     except Exception as e:
         logger.error(f'Error in mcp_structure_control: {str(e)}')
-        await ctx.error(f'Error generating with structure control: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -2056,7 +2035,7 @@ async def mcp_style_guide(
             fidelity=fidelity,
             negative_prompt=negative_prompt,
             seed=seed,
-            output_format=OutputFormat(output_format),
+            output_format=parse_output_format(output_format),
         )
 
         logger.info(f'Generating image with style guide, fidelity={fidelity}')
@@ -2074,12 +2053,10 @@ async def mcp_style_guide(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Style guide returned error status: {response.message}')
-            await ctx.error(f'Failed to generate with style guide: {response.message}')
-            raise Exception(f'Failed to generate with style guide: {response.message}')
+            raise ImageServiceError(f'Failed to generate with style guide: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_style_guide: {str(e)}')
-        await ctx.error(f'Error generating with style guide: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -2191,7 +2168,7 @@ async def mcp_style_transfer(
             change_strength=change_strength,
             negative_prompt=negative_prompt,
             seed=seed,
-            output_format=OutputFormat(output_format),
+            output_format=parse_output_format(output_format),
         )
 
         logger.info(
@@ -2212,12 +2189,10 @@ async def mcp_style_transfer(
                 paths=[f'file://{path}' for path in response.paths],
             )
         else:
-            logger.error(f'Style transfer returned error status: {response.message}')
-            await ctx.error(f'Failed to transfer style: {response.message}')
-            raise Exception(f'Failed to transfer style: {response.message}')
+            raise ImageServiceError(f'Failed to transfer style: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_style_transfer: {str(e)}')
-        await ctx.error(f'Error transferring style: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -2278,10 +2253,6 @@ async def mcp_create_rectangular_mask(
     logger.debug('MCP tool create_rectangular_mask called')
 
     try:
-        import uuid
-        from awslabs.bedrock_image_mcp_server.utils.image_utils import create_rectangular_mask
-
-        # Create the mask
         mask_bytes = create_rectangular_mask(
             width=width,
             height=height,
@@ -2292,20 +2263,12 @@ async def mcp_create_rectangular_mask(
             feather=feather,
         )
 
-        # Save the mask
-        output_dir = os.path.join(workspace_dir or os.getcwd(), 'output')
-        os.makedirs(output_dir, exist_ok=True)
+        mask_path = write_mask(mask_bytes, filename, workspace_dir)
 
-        mask_filename = filename or f'mask_{uuid.uuid4().hex[:8]}'
-        mask_path = os.path.join(output_dir, f'{mask_filename}.png')
-
-        with open(mask_path, 'wb') as f:
-            f.write(mask_bytes)
-
-        logger.info(
-            f'Created rectangular mask: {mask_width}x{mask_height} at ({x},{y})',
-            extra={'path': mask_path, 'feather': feather},
-        )
+        logger.bind(
+            path=mask_path,
+            feather=feather,
+        ).info(f'Created rectangular mask: {mask_width}x{mask_height} at ({x},{y})')
 
         return McpImageGenerationResponse(
             status='success',
@@ -2313,7 +2276,7 @@ async def mcp_create_rectangular_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_rectangular_mask: {str(e)}')
-        await ctx.error(f'Error creating rectangular mask: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -2374,10 +2337,6 @@ async def mcp_create_ellipse_mask(
     logger.debug('MCP tool create_ellipse_mask called')
 
     try:
-        import uuid
-        from awslabs.bedrock_image_mcp_server.utils.image_utils import create_ellipse_mask
-
-        # Create the mask
         mask_bytes = create_ellipse_mask(
             width=width,
             height=height,
@@ -2388,20 +2347,12 @@ async def mcp_create_ellipse_mask(
             feather=feather,
         )
 
-        # Save the mask
-        output_dir = os.path.join(workspace_dir or os.getcwd(), 'output')
-        os.makedirs(output_dir, exist_ok=True)
+        mask_path = write_mask(mask_bytes, filename, workspace_dir)
 
-        mask_filename = filename or f'mask_{uuid.uuid4().hex[:8]}'
-        mask_path = os.path.join(output_dir, f'{mask_filename}.png')
-
-        with open(mask_path, 'wb') as f:
-            f.write(mask_bytes)
-
-        logger.info(
-            f'Created ellipse mask: radii {radius_x}x{radius_y} at ({center_x},{center_y})',
-            extra={'path': mask_path, 'feather': feather},
-        )
+        logger.bind(
+            path=mask_path,
+            feather=feather,
+        ).info(f'Created ellipse mask: radii {radius_x}x{radius_y} at ({center_x},{center_y})')
 
         return McpImageGenerationResponse(
             status='success',
@@ -2409,7 +2360,7 @@ async def mcp_create_ellipse_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_ellipse_mask: {str(e)}')
-        await ctx.error(f'Error creating ellipse mask: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
@@ -2452,23 +2403,11 @@ async def mcp_create_full_mask(
     logger.debug('MCP tool create_full_mask called')
 
     try:
-        import uuid
-        from awslabs.bedrock_image_mcp_server.utils.image_utils import create_full_mask
-
-        # Create the mask
         mask_bytes = create_full_mask(width=width, height=height)
 
-        # Save the mask
-        output_dir = os.path.join(workspace_dir or os.getcwd(), 'output')
-        os.makedirs(output_dir, exist_ok=True)
+        mask_path = write_mask(mask_bytes, filename, workspace_dir)
 
-        mask_filename = filename or f'mask_{uuid.uuid4().hex[:8]}'
-        mask_path = os.path.join(output_dir, f'{mask_filename}.png')
-
-        with open(mask_path, 'wb') as f:
-            f.write(mask_bytes)
-
-        logger.info(f'Created full mask: {width}x{height}', extra={'path': mask_path})
+        logger.bind(path=mask_path).info(f'Created full mask: {width}x{height}')
 
         return McpImageGenerationResponse(
             status='success',
@@ -2476,13 +2415,13 @@ async def mcp_create_full_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_full_mask: {str(e)}')
-        await ctx.error(f'Error creating full mask: {str(e)}')
+        await ctx.error(str(e))
         raise
 
 
 def main():
     """Run the MCP server with CLI argument support."""
-    logger.info('Starting nova-canvas-mcp-server MCP server')
+    logger.info('Starting bedrock-image-mcp-server MCP server')
     mcp.run()
 
 
