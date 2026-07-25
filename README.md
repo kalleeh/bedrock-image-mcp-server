@@ -22,8 +22,20 @@ Three Stability AI text-to-image models form a quality ladder, all in us-west-2:
 
 **Doing professional or commercial work?** Use `generate_image_ultra` for a single high-value
 asset — print, large format, or anything with text in the image. Use `generate_image_sd35` when
-you need many professional assets rather than one hero image. Use `generate_image_core` only for
-drafts and iteration.
+you need many professional assets rather than one hero image, or to trade some fidelity for
+lower cost. Use `generate_image_core` only for drafts and iteration.
+
+**Ultra is not only for photography.** It is tempting to assume SD3.5 is the better choice for
+illustration, anime, fantasy or other non-photographic styles. We tested that: eight style
+categories, both models, identical prompts and seeds. Ultra matched or beat SD3.5 in every
+category, including anime, pixel art, watercolour and inked comic, and followed reductive
+instructions like "limited palette" and "heavy black inks" more literally. SD3.5 tended to add
+saturation and extra detail, and was clearly weaker at text and at small faces. Fantasy and line
+art were effectively ties.
+
+So pick by **budget and volume, not by whether the style is photographic**. Two caveats from the
+same test: neither model produced real halftone dots when asked, and both added shading to a
+"no shading" line-art prompt. One sample per cell at one seed, so treat the ties as ties.
 
 Quotes and credit rates are from Stability AI's own API specification
 (`api.stability.ai/v2alpha/openapi`) and [newsroom](https://stability.ai/news-updates/stability-ais-top-3-text-to-image-models-now-available-in-amazon-bedrock).

@@ -191,8 +191,8 @@ Ultra 8 (their credit rates).
   image**. Most expensive.
 - **generate_image_sd35** — "ideal for professional use cases at 1 megapixel resolution" and
   for "high-volume, high-quality digital assets like websites, newsletters, and marketing
-  materials". Widest style range (3D, photography, painting, line art). Use when producing
-  **many professional assets** rather than one hero image. Good default.
+  materials". Use when producing **many assets** rather than one hero image, or to trade some
+  fidelity for lower cost. Good default.
 - **generate_image_core** — "optimized for fast and affordable image generation, great for
   rapidly iterating on concepts during ideation". Use for **drafts, thumbnails and bulk work**.
   Not for client-facing deliverables. Cheapest.
@@ -633,7 +633,7 @@ async def mcp_generate_image_sd35(
     strong text quality, though Stability reserves their typography claim for Ultra.
 
     Best for: high-volume professional asset production — websites, newsletters, marketing
-    materials, concept art and product renders — and work needing a specific style.
+    materials, concept art and product renders — and when cost per image matters.
 
     ## Choosing between the text-to-image tools
 
@@ -654,6 +654,13 @@ async def mcp_generate_image_sd35(
     generate_image_ultra — especially for print, large format or anything with text in the
     image. Use generate_image_sd35 when producing many assets rather than one hero image. Use
     generate_image_core only when speed or cost matters more than fidelity.
+
+    Ultra is not only for photography. Compared head to head on identical prompts and seeds,
+    Ultra also matched or beat SD3.5 on anime, pixel art, watercolour and inked comic styles,
+    and followed reductive instructions like "limited palette" more literally. SD3.5 tends to
+    add saturation and detail. So choose by budget and volume, not by whether the target style
+    is photographic. Both models ignore halftone-dot requests and add some shading even when
+    told not to.
 
     Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
     a color palette, Nova style presets, or several images in one request.
@@ -798,6 +805,13 @@ async def mcp_generate_image_ultra(
     image. Use generate_image_sd35 when producing many assets rather than one hero image. Use
     generate_image_core only when speed or cost matters more than fidelity.
 
+    Ultra is not only for photography. Compared head to head on identical prompts and seeds,
+    Ultra also matched or beat SD3.5 on anime, pixel art, watercolour and inked comic styles,
+    and followed reductive instructions like "limited palette" more literally. SD3.5 tends to
+    add saturation and detail. So choose by budget and volume, not by whether the target style
+    is photographic. Both models ignore halftone-dot requests and add some shading even when
+    told not to.
+
     ## Requirements and limits
 
     - Available in us-west-2 only
@@ -909,6 +923,13 @@ async def mcp_generate_image_core(
     generate_image_ultra — especially for print, large format or anything with text in the
     image. Use generate_image_sd35 when producing many assets rather than one hero image. Use
     generate_image_core only when speed or cost matters more than fidelity.
+
+    Ultra is not only for photography. Compared head to head on identical prompts and seeds,
+    Ultra also matched or beat SD3.5 on anime, pixel art, watercolour and inked comic styles,
+    and followed reductive instructions like "limited palette" more literally. SD3.5 tends to
+    add saturation and detail. So choose by budget and volume, not by whether the target style
+    is photographic. Both models ignore halftone-dot requests and add some shading even when
+    told not to.
 
     ## Requirements and limits
 

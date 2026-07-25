@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     work, not client-facing deliverables.
 - Documents the relative cost per image as Stability's credit rates (Core 3, SD3.5 Large 6.5,
   Ultra 8), noting they are a ratio rather than a Bedrock price.
+- Removes the implication that SD3.5 Large is the better choice for non-photographic styles.
+  Neither Stability's specification nor AWS makes that claim, and a head-to-head test across
+  eight style categories with identical prompts and seeds contradicted it: Ultra matched or beat
+  SD3.5 everywhere, including anime, pixel art, watercolour and inked comic. The docs now say to
+  choose on budget and volume rather than on whether the target style is photographic, and note
+  that both models ignore halftone-dot requests and add shading when told not to.
 - Quotes are verified against Stability's own API specification at
   `api.stability.ai/v2alpha/openapi` rather than paraphrased, since their documentation site is
   JavaScript-rendered and not directly readable.
