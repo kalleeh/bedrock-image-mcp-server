@@ -15,9 +15,14 @@
 
 import base64
 import os
+from awslabs.bedrock_image_mcp_server.consts import MAX_DECODED_IMAGE_PIXELS
 from io import BytesIO
-from PIL import Image
-from typing import Tuple
+from PIL import Image, ImageDraw, ImageFilter
+from typing import Optional, Tuple
+
+
+# Refuse to decode images large enough to exhaust memory (decompression bombs).
+Image.MAX_IMAGE_PIXELS = MAX_DECODED_IMAGE_PIXELS
 
 
 def encode_image_file(file_path: str) -> str:
@@ -38,7 +43,7 @@ def encode_image_file(file_path: str) -> str:
         ValueError: If the file is not a valid image.
     """
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Image file not found: {file_path}")
+        raise FileNotFoundError(f'Image file not found: {file_path}')
 
     try:
         with open(file_path, 'rb') as image_file:
@@ -46,9 +51,9 @@ def encode_image_file(file_path: str) -> str:
             base64_encoded = base64.b64encode(image_data).decode('utf-8')
             return base64_encoded
     except IOError as e:
-        raise IOError(f"Failed to read image file {file_path}: {str(e)}")
+        raise IOError(f'Failed to read image file {file_path}: {str(e)}')
     except Exception as e:
-        raise ValueError(f"Failed to encode image file {file_path}: {str(e)}")
+        raise ValueError(f'Failed to encode image file {file_path}: {str(e)}')
 
 
 def decode_base64_image(base64_str: str) -> bytes:
@@ -64,16 +69,17 @@ def decode_base64_image(base64_str: str) -> bytes:
         ValueError: If the base64 string is invalid.
     """
     try:
-        return base64.b64decode(base64_str)
+        # Remove only the line wrapping that base64 encoders emit, so validate=True rejects
+        # genuinely corrupt data without rejecting valid input. Interior spaces are left in
+        # place so that arbitrary prose is not silently reinterpreted as image data.
+        normalized = base64_str.strip().replace('\r', '').replace('\n', '')
+        return base64.b64decode(normalized, validate=True)
     except Exception as e:
-        raise ValueError(f"Failed to decode base64 image: {str(e)}")
+        raise ValueError(f'Failed to decode base64 image: {str(e)}')
 
 
 def validate_image_dimensions(
-    image_data: bytes,
-    min_width: int = 64,
-    min_height: int = 64,
-    max_pixels: int = None
+    image_data: bytes, min_width: int = 64, min_height: int = 64, max_pixels: Optional[int] = None
 ) -> Tuple[int, int]:
     """Validate image dimensions against constraints.
 
@@ -96,46 +102,36 @@ def validate_image_dimensions(
     """
     try:
         # Open image from bytes
-        image = Image.open(BytesIO(image_data))
-        width, height = image.size
+        with Image.open(BytesIO(image_data)) as image:
+            width, height = image.size
 
         # Validate minimum dimensions
         if width < min_width:
-            raise ValueError(
-                f"Image width {width}px is below minimum {min_width}px"
-            )
+            raise ValueError(f'Image width {width}px is below minimum {min_width}px')
         if height < min_height:
-            raise ValueError(
-                f"Image height {height}px is below minimum {min_height}px"
-            )
+            raise ValueError(f'Image height {height}px is below minimum {min_height}px')
 
         # Validate maximum pixels if specified
         if max_pixels is not None:
             total_pixels = width * height
             if total_pixels > max_pixels:
                 raise ValueError(
-                    f"Image has {total_pixels} pixels, exceeding maximum {max_pixels} pixels"
+                    f'Image has {total_pixels} pixels, exceeding maximum {max_pixels} pixels'
                 )
 
         return width, height
 
     except IOError as e:
-        raise IOError(f"Failed to open image data: {str(e)}")
+        raise IOError(f'Failed to open image data: {str(e)}')
     except ValueError:
         # Re-raise ValueError as-is (from our validation)
         raise
     except Exception as e:
-        raise ValueError(f"Failed to validate image dimensions: {str(e)}")
+        raise ValueError(f'Failed to validate image dimensions: {str(e)}')
 
 
 def create_rectangular_mask(
-    width: int,
-    height: int,
-    x: int,
-    y: int,
-    mask_width: int,
-    mask_height: int,
-    feather: int = 0
+    width: int, height: int, x: int, y: int, mask_width: int, mask_height: int, feather: int = 0
 ) -> bytes:
     """Create a rectangular mask for inpainting or object removal.
 
@@ -159,28 +155,30 @@ def create_rectangular_mask(
         ValueError: If dimensions are invalid or rectangle is out of bounds.
     """
     if width <= 0 or height <= 0:
-        raise ValueError(f"Image dimensions must be positive: {width}x{height}")
+        raise ValueError(f'Image dimensions must be positive: {width}x{height}')
+    if width * height > MAX_DECODED_IMAGE_PIXELS:
+        raise ValueError(
+            f'Mask size {width}x{height} exceeds the maximum of {MAX_DECODED_IMAGE_PIXELS} pixels'
+        )
     if mask_width <= 0 or mask_height <= 0:
-        raise ValueError(f"Mask dimensions must be positive: {mask_width}x{mask_height}")
+        raise ValueError(f'Mask dimensions must be positive: {mask_width}x{mask_height}')
     if x < 0 or y < 0:
-        raise ValueError(f"Mask position must be non-negative: ({x}, {y})")
+        raise ValueError(f'Mask position must be non-negative: ({x}, {y})')
     if x + mask_width > width or y + mask_height > height:
         raise ValueError(
-            f"Mask rectangle ({x}, {y}, {mask_width}, {mask_height}) "
-            f"exceeds image bounds ({width}x{height})"
+            f'Mask rectangle ({x}, {y}, {mask_width}, {mask_height}) '
+            f'exceeds image bounds ({width}x{height})'
         )
 
     # Create black background
     mask = Image.new('L', (width, height), 0)
 
     # Draw white rectangle
-    from PIL import ImageDraw
     draw = ImageDraw.Draw(mask)
     draw.rectangle([x, y, x + mask_width - 1, y + mask_height - 1], fill=255)
 
     # Apply feathering if requested
     if feather > 0:
-        from PIL import ImageFilter
         mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
 
     # Convert to PNG bytes
@@ -196,7 +194,7 @@ def create_ellipse_mask(
     center_y: int,
     radius_x: int,
     radius_y: int,
-    feather: int = 0
+    feather: int = 0,
 ) -> bytes:
     """Create an elliptical mask for inpainting or object removal.
 
@@ -220,29 +218,36 @@ def create_ellipse_mask(
         ValueError: If dimensions are invalid or ellipse is out of bounds.
     """
     if width <= 0 or height <= 0:
-        raise ValueError(f"Image dimensions must be positive: {width}x{height}")
+        raise ValueError(f'Image dimensions must be positive: {width}x{height}')
+    if width * height > MAX_DECODED_IMAGE_PIXELS:
+        raise ValueError(
+            f'Mask size {width}x{height} exceeds the maximum of {MAX_DECODED_IMAGE_PIXELS} pixels'
+        )
     if radius_x <= 0 or radius_y <= 0:
-        raise ValueError(f"Ellipse radii must be positive: {radius_x}x{radius_y}")
+        raise ValueError(f'Ellipse radii must be positive: {radius_x}x{radius_y}')
     if center_x < 0 or center_y < 0:
-        raise ValueError(f"Ellipse center must be non-negative: ({center_x}, {center_y})")
+        raise ValueError(f'Ellipse center must be non-negative: ({center_x}, {center_y})')
+    if (
+        center_x - radius_x < 0
+        or center_y - radius_y < 0
+        or center_x + radius_x > width
+        or center_y + radius_y > height
+    ):
+        raise ValueError(
+            f'Ellipse (center ({center_x}, {center_y}), radii {radius_x}x{radius_y}) '
+            f'exceeds image bounds ({width}x{height})'
+        )
 
     # Create black background
     mask = Image.new('L', (width, height), 0)
 
     # Draw white ellipse
-    from PIL import ImageDraw
     draw = ImageDraw.Draw(mask)
-    bbox = [
-        center_x - radius_x,
-        center_y - radius_y,
-        center_x + radius_x,
-        center_y + radius_y
-    ]
+    bbox = [center_x - radius_x, center_y - radius_y, center_x + radius_x, center_y + radius_y]
     draw.ellipse(bbox, fill=255)
 
     # Apply feathering if requested
     if feather > 0:
-        from PIL import ImageFilter
         mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
 
     # Convert to PNG bytes
@@ -267,7 +272,11 @@ def create_full_mask(width: int, height: int) -> bytes:
         ValueError: If dimensions are invalid.
     """
     if width <= 0 or height <= 0:
-        raise ValueError(f"Image dimensions must be positive: {width}x{height}")
+        raise ValueError(f'Image dimensions must be positive: {width}x{height}')
+    if width * height > MAX_DECODED_IMAGE_PIXELS:
+        raise ValueError(
+            f'Mask size {width}x{height} exceeds the maximum of {MAX_DECODED_IMAGE_PIXELS} pixels'
+        )
 
     # Create white image
     mask = Image.new('L', (width, height), 255)

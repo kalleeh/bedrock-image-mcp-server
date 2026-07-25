@@ -15,8 +15,9 @@
 
 import random
 import re
+from awslabs.bedrock_image_mcp_server.consts import MAX_PROMPT_LENGTH_NOVA, NOVA_MAX_SEED
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, Dict, List, Literal, Optional
 
 
@@ -63,7 +64,9 @@ class ImageGenerationConfig(BaseModel):
     height: int = Field(default=1024, ge=320, le=4096)
     quality: Quality = Quality.STANDARD
     cfgScale: float = Field(default=6.5, ge=1.1, le=10.0)
-    seed: int = Field(default_factory=lambda: random.randint(0, 858993459), ge=0, le=858993459)
+    seed: int = Field(
+        default_factory=lambda: random.randint(0, NOVA_MAX_SEED), ge=0, le=NOVA_MAX_SEED
+    )
     numberOfImages: int = Field(default=1, ge=1, le=5)
 
     @field_validator('width', 'height')
@@ -141,8 +144,10 @@ class TextToImageParams(BaseModel):
         style: Optional visual style preset for the generated image.
     """
 
-    text: str = Field(..., min_length=1, max_length=1024)
-    negativeText: Optional[str] = Field(default=None, min_length=1, max_length=1024)
+    text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_NOVA)
+    negativeText: Optional[str] = Field(
+        default=None, min_length=1, max_length=MAX_PROMPT_LENGTH_NOVA
+    )
     style: Optional[ImageStyle] = Field(default=None)
 
 
@@ -158,8 +163,10 @@ class ColorGuidedGenerationParams(BaseModel):
     """
 
     colors: List[str] = Field(..., max_length=10)
-    text: str = Field(..., min_length=1, max_length=1024)
-    negativeText: Optional[str] = Field(default=None, min_length=1, max_length=1024)
+    text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_NOVA)
+    negativeText: Optional[str] = Field(
+        default=None, min_length=1, max_length=MAX_PROMPT_LENGTH_NOVA
+    )
 
     @field_validator('colors')
     @classmethod
@@ -294,10 +301,7 @@ class ImageGenerationResponse(BaseModel):
     negative_prompt: Optional[str] = None
     colors: Optional[List[str]] = None
 
-    class Config:
-        """Pydantic configuration."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __getitem__(self, key: str) -> Any:
         """Support dictionary-style access for backward compatibility.

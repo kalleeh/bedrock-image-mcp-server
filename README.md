@@ -3,28 +3,23 @@
 [![PyPI version](https://badge.fury.io/py/bedrock-image-mcp-server.svg)](https://badge.fury.io/py/bedrock-image-mcp-server)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CI](https://github.com/kalleeh/bedrock-image-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/kalleeh/bedrock-image-mcp-server/actions/workflows/ci.yml)
 [![GitHub Actions](https://github.com/kalleeh/bedrock-image-mcp-server/workflows/Publish%20to%20PyPI/badge.svg)](https://github.com/kalleeh/bedrock-image-mcp-server/actions)
 
 > **Note:** This is a community-maintained fork of [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) with additional features and improvements. Original work by Amazon Web Services under Apache 2.0 license.
 
 MCP server for generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
 
+## Which model should I use?
+
+For general text-to-image, use **`generate_image_sd35`** (Stable Diffusion 3.5 Large). It
+has noticeably better prompt adherence and output quality, and accepts prompts up to 10,000
+characters. Reach for the Nova Canvas tools when you need something only Nova offers:
+explicit pixel dimensions, a color palette, Nova style presets, or several images per request.
+
 ## Features
 
-### Amazon Nova Canvas (2 tools)
-
-#### Text-based image generation
-- Create images from text prompts with `generate_image`
-- Customizable dimensions (320-4096px), quality options, and negative prompting
-- Supports multiple image generation (1-5) in single request
-- Adjustable parameters like cfg_scale (1.1-10.0) and seeded generation
-
-#### Color-guided image generation
-- Generate images with specific color palettes using `generate_image_with_colors`
-- Define up to 10 hex color values to influence the image style and mood
-- Same customization options as text-based generation
-
-### Stable Diffusion 3.5 Large (2 tools)
+### Stable Diffusion 3.5 Large (2 tools) — recommended for text-to-image
 
 #### Text-to-image generation
 - Generate images from text prompts with `generate_image_sd35`
@@ -38,6 +33,19 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 - Strength parameter (0.0-1.0) controls transformation intensity
 - Supports file paths and base64 image inputs
 - All text-to-image parameters available
+
+### Amazon Nova Canvas (2 tools)
+
+#### Text-based image generation
+- Create images from text prompts with `generate_image`
+- Customizable dimensions (320-4096px), quality options, and negative prompting
+- Supports multiple image generation (1-5) in single request
+- Adjustable parameters like cfg_scale (1.1-10.0) and seeded generation
+
+#### Color-guided image generation
+- Generate images with specific color palettes using `generate_image_with_colors`
+- Define up to 10 hex color values to influence the image style and mood
+- Same customization options as text-based generation
 
 ### Stability AI Upscale Services (3 tools)
 
@@ -266,30 +274,16 @@ Make sure the AWS profile has permissions to access Amazon Bedrock and the image
 
 ## Usage Examples
 
-### Amazon Nova Canvas
+### Stable Diffusion 3.5 Large (start here)
 
-#### Basic Text-to-Image
+#### Text-to-Image
 ```python
-# Generate a simple image
-generate_image(
+# The recommended default for text-to-image
+generate_image_sd35(
     prompt="A serene mountain landscape at sunset",
-    width=1024,
-    height=1024
+    aspect_ratio="1:1"
 )
 ```
-
-#### Color-Guided Generation
-```python
-# Generate with specific color palette
-generate_image_with_colors(
-    prompt="A modern living room interior",
-    colors=["#2C3E50", "#ECF0F1", "#E74C3C"],
-    width=1280,
-    height=720
-)
-```
-
-### Stable Diffusion 3.5 Large
 
 #### Text-to-Image with Long Prompt
 ```python
@@ -310,6 +304,30 @@ transform_image_sd35(
     image="/path/to/image.jpg",
     strength=0.7,
     aspect_ratio="1:1"
+)
+```
+
+### Amazon Nova Canvas
+
+Use these when you need exact pixel dimensions, a color palette, or multiple images per request.
+
+#### Text-to-Image with Explicit Dimensions
+```python
+generate_image(
+    prompt="A serene mountain landscape at sunset",
+    width=1024,
+    height=1024
+)
+```
+
+#### Color-Guided Generation
+```python
+# Generate with specific color palette
+generate_image_with_colors(
+    prompt="A modern living room interior",
+    colors=["#2C3E50", "#ECF0F1", "#E74C3C"],
+    width=1280,
+    height=720
 )
 ```
 
@@ -487,32 +505,51 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
 
 ## Supported AWS Regions
 
-The following AWS regions support Amazon Bedrock with the image generation models used by this server:
+Region coverage differs sharply between the model families, and **no single region runs all of
+them**. Pick your `AWS_REGION` based on which tools you need.
 
-### Amazon Nova Canvas
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+| Tools | Regions | Lifecycle |
+|---|---|---|
+| `generate_image_sd35`, `transform_image_sd35` (SD3.5 Large) | **us-west-2 only** | Active |
+| The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 | Active |
+| `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 | **Legacy — EOL 2026-09-30** |
 
-### Stable Diffusion 3.5 Large
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- eu-central-1 (Europe - Frankfurt)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+Practical consequences:
 
-### Stability AI Image Services
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- eu-central-1 (Europe - Frankfurt)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+- **us-west-2** is the only region where SD3.5 works, and it also covers all 13 Stability
+  tools — so it is the best single choice for the recommended SD3.5-first workflow. Nova
+  Canvas is *not* available there.
+- **us-east-1** covers Nova Canvas plus the 13 Stability tools, but not SD3.5.
+- If you need both SD3.5 and Nova Canvas, you will need to run two server instances with
+  different `AWS_REGION` values.
 
-**Note**: Model availability may change. Check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html) for the most current information.
+The Stability AI tools are invoked through US Geo cross-region inference profiles (their model
+IDs carry a `us.` prefix), so a request sent to any of the three regions may be served from
+another one. The underlying in-region model IDs are not enabled for direct on-demand use.
+
+### Nova Canvas is retiring
+
+AWS moved Nova Canvas to **Legacy on 2026-03-30, with end-of-life on 2026-09-30**. After that
+date the two Nova tools will stop working. AWS also restricts Legacy models in ways that bite
+before then:
+
+- New customers cannot start using a Legacy model at all
+- Existing customers **may lose access after 15 days of inactivity**, which surfaces as
+  `ResourceNotFoundException` (see [Troubleshooting](#this-model-is-marked-by-provider-as-legacy-nova-canvas))
+
+If you rely on Nova Canvas today, plan to move to `generate_image_sd35` in us-west-2.
+
+**Note**: verified against both the Bedrock API (`GetFoundationModel` lifecycle status) and the
+AWS model cards. Availability changes, so check your own region with:
+
+```bash
+aws bedrock list-foundation-models --region us-west-2 \
+  --query "modelSummaries[?contains(modelId,'stability') || contains(modelId,'nova-canvas')].[modelId,modelLifecycle.status]"
+```
+
+See the AWS [regional availability by model](https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html)
+and [model lifecycle](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+pages for the authoritative lists.
 
 ## Troubleshooting
 
@@ -523,12 +560,47 @@ The following AWS regions support Amazon Bedrock with the image generation model
 **Problem**: You receive errors indicating the model is not available or you don't have access.
 
 **Solutions**:
-1. Verify your AWS region supports the model you're trying to use (see [Supported AWS Regions](#supported-aws-regions))
+1. Verify your AWS region supports the model you're trying to use (see [Supported AWS Regions](#supported-aws-regions)).
+   `The provided model identifier is invalid` almost always means the model is not in your
+   region — most often SD3.5, which is us-west-2 only.
 2. Ensure you've requested model access in the AWS Bedrock console:
    - Go to AWS Bedrock console → Model access
    - Request access for the models you want to use
    - Wait for approval (usually instant for most models)
 3. Verify your IAM permissions include `bedrock:InvokeModel` for the specific model ARN
+
+#### "This Model is marked by provider as Legacy" (Nova Canvas)
+
+**Problem**: `generate_image` or `generate_image_with_colors` fails with
+`ResourceNotFoundException: Access denied. This Model is marked by provider as Legacy and you
+have not been actively using the model in the last 30 days.`
+
+**Cause**: AWS moved Nova Canvas to Legacy on 2026-03-30, with **end-of-life on 2026-09-30**.
+Per the AWS model lifecycle policy, existing customers may lose access to a Legacy model after
+**15 days of inactivity**, and new customers cannot use it at all. Previously granted model
+access does not exempt you.
+
+**Solutions**:
+- Prefer `generate_image_sd35` in us-west-2. This is the recommended text-to-image tool and is
+  Active, so it is the migration path rather than a workaround.
+- To keep using Nova Canvas before EOL, re-request access in the Bedrock console and invoke it
+  at least once every 15 days.
+- Note that after 2026-09-30 the two Nova tools will stop working regardless.
+
+#### "Response payload size exceeds limit" (Creative Upscale)
+
+**Problem**: `upscale_creative` fails with
+`{"detail":"Response payload size NNNNNNNN bytes exceeds limit"}`.
+
+**Cause**: Bedrock's `InvokeModel` caps the response size, and a 4K PNG upscale exceeds it.
+This is an API limit, not a bug in this server.
+
+**Solution**: request `output_format="jpeg"`. Creative upscale always returns roughly a
+3150x3150 image, which is ~24MB as PNG (over the cap) but ~5MB as JPEG.
+
+Note that a *smaller input* does not help — the output size is fixed, so a 256x256 input fails
+just the same with PNG. `upscale_conservative` and `upscale_fast` are unaffected and work with
+PNG.
 
 #### "Invalid image dimensions" errors
 

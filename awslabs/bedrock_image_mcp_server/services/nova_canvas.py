@@ -18,6 +18,7 @@ through the AWS Bedrock service. It uses the common bedrock utilities for
 API invocation and image saving.
 """
 
+import asyncio
 import random
 from awslabs.bedrock_image_mcp_server.consts import (
     DEFAULT_CFG_SCALE,
@@ -84,23 +85,21 @@ async def generate_image_with_text(
         seed: Seed for generation (0-858,993,459). Random if not provided.
         number_of_images: The number of images to generate (1-5).
         workspace_dir: Directory where the images should be saved. If None, uses current directory.
+        style: Optional Nova Canvas style preset to apply.
 
     Returns:
         ImageGenerationResponse: An object containing the paths to the generated images
         and status information.
     """
-    logger.debug(
-        f"Generating text-to-image with prompt: '{prompt[:30]}...'",
-        extra={
-            'model': 'nova-canvas',
-            'dimensions': f'{width}x{height}',
-            'quality': quality,
-            'cfg_scale': cfg_scale,
-            'num_images': number_of_images,
-            'prompt_length': len(prompt),
-            'has_negative_prompt': negative_prompt is not None
-        }
-    )
+    logger.bind(
+        model='nova-canvas',
+        dimensions=f'{width}x{height}',
+        quality=quality,
+        cfg_scale=cfg_scale,
+        num_images=number_of_images,
+        prompt_length=len(prompt),
+        has_negative_prompt=negative_prompt is not None,
+    ).debug(f"Generating text-to-image with prompt: '{prompt[:30]}...'")
 
     try:
         # Validate input parameters using Pydantic
@@ -111,7 +110,7 @@ async def generate_image_with_text(
             config = ImageGenerationConfig(
                 width=width,
                 height=height,
-                quality=Quality.STANDARD if quality == DEFAULT_QUALITY else Quality.PREMIUM,
+                quality=Quality(quality.lower()),
                 cfgScale=cfg_scale,
                 seed=seed if seed is not None else random.randint(0, 858993459),
                 numberOfImages=number_of_images,
@@ -120,7 +119,9 @@ async def generate_image_with_text(
             # Create text-to-image params
             style_enum = ImageStyle(style) if style else None
             if negative_prompt is not None:
-                text_params = TextToImageParams(text=prompt, negativeText=negative_prompt, style=style_enum)
+                text_params = TextToImageParams(
+                    text=prompt, negativeText=negative_prompt, style=style_enum
+                )
             else:
                 text_params = TextToImageParams(text=prompt, style=style_enum)
 
@@ -150,32 +151,30 @@ async def generate_image_with_text(
             model_response = await invoke_bedrock_model(
                 model_id=NOVA_CANVAS_MODEL_ID,
                 request_body=request_model_dict,
-                bedrock_client=bedrock_runtime_client
+                bedrock_client=bedrock_runtime_client,
             )
 
             # Extract the image data
             base64_images = model_response['images']
-            logger.info(
-                f'Received {len(base64_images)} images from Nova Canvas API',
-                extra={'images_count': len(base64_images), 'model': 'nova-canvas'}
-            )
+            logger.bind(
+                images_count=len(base64_images),
+                model='nova-canvas',
+            ).info(f'Received {len(base64_images)} images from Nova Canvas API')
 
             # Save the generated images using common function
-            saved_paths = save_images(
+            saved_paths = await asyncio.to_thread(
+                save_images,
                 base64_images=base64_images,
                 workspace_dir=workspace_dir,
-                filename_prefix='nova_canvas',
-                output_format=OutputFormat.PNG
+                filename_prefix=filename or 'nova_canvas',
+                output_format=OutputFormat.PNG,
             )
 
-            logger.info(
-                f'Successfully generated {len(saved_paths)} image(s)',
-                extra={
-                    'images_count': len(saved_paths),
-                    'model': 'nova-canvas',
-                    'output_dir': workspace_dir or 'current_directory'
-                }
-            )
+            logger.bind(
+                images_count=len(saved_paths),
+                model='nova-canvas',
+                output_dir=workspace_dir or 'current_directory',
+            ).info(f'Successfully generated {len(saved_paths)} image(s)')
             return ImageGenerationResponse(
                 status='success',
                 message=f'Generated {len(saved_paths)} image(s)',
@@ -184,14 +183,11 @@ async def generate_image_with_text(
                 negative_prompt=negative_prompt,
             )
         except Exception as e:
-            logger.error(
-                f'Image generation failed: {str(e)}',
-                extra={
-                    'model': 'nova-canvas',
-                    'error_type': type(e).__name__,
-                    'prompt_length': len(prompt)
-                }
-            )
+            logger.bind(
+                model='nova-canvas',
+                error_type=type(e).__name__,
+                prompt_length=len(prompt),
+            ).error(f'Image generation failed: {str(e)}')
             return ImageGenerationResponse(
                 status='error',
                 message=str(e),
@@ -262,7 +258,7 @@ async def generate_image_with_colors(
             config = ImageGenerationConfig(
                 width=width,
                 height=height,
-                quality=Quality.STANDARD if quality == DEFAULT_QUALITY else Quality.PREMIUM,
+                quality=Quality(quality.lower()),
                 cfgScale=cfg_scale,
                 seed=seed if seed is not None else random.randint(0, 858993459),
                 numberOfImages=number_of_images,
@@ -307,7 +303,7 @@ async def generate_image_with_colors(
             model_response = await invoke_bedrock_model(
                 model_id=NOVA_CANVAS_MODEL_ID,
                 request_body=request_model_dict,
-                bedrock_client=bedrock_runtime_client
+                bedrock_client=bedrock_runtime_client,
             )
 
             # Extract the image data
@@ -315,11 +311,12 @@ async def generate_image_with_colors(
             logger.info(f'Received {len(base64_images)} images from Nova Canvas API')
 
             # Save the generated images using common function
-            saved_paths = save_images(
+            saved_paths = await asyncio.to_thread(
+                save_images,
                 base64_images=base64_images,
                 workspace_dir=workspace_dir,
-                filename_prefix='nova_canvas_color',
-                output_format=OutputFormat.PNG
+                filename_prefix=filename or 'nova_canvas_color',
+                output_format=OutputFormat.PNG,
             )
 
             logger.info(f'Successfully generated {len(saved_paths)} color-guided image(s)')

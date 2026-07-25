@@ -1,51 +1,55 @@
-# Nova Canvas MCP Server Tests
+# Bedrock Image MCP Server Tests
 
-This directory contains tests for the Nova Canvas MCP Server, which provides tools for generating images using Amazon Nova Canvas through Amazon Bedrock.
+This directory contains tests for the Bedrock Image MCP Server, which provides tools for
+generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and
+Stability AI Image Services through Amazon Bedrock.
 
 ## Test Structure
 
-The test suite is organized as follows:
-
-- `conftest.py`: Contains pytest fixtures used across the test suite
-- `test_models.py`: Tests for the Pydantic models used for request/response handling
-- `test_novacanvas.py`: Tests for the Nova Canvas API interaction functions
-- `test_server.py`: Tests for the MCP server functionality
+- `conftest.py`: pytest fixtures shared across the suite
+- `test_models.py`: Nova Canvas request/response models
+- `test_sd35_models.py`: SD3.5 parameter models and validators
+- `test_bedrock_common.py`: shared Bedrock invocation, error classification, and image saving
+- `test_novacanvas.py`: Nova Canvas service functions
+- `test_sd35_service.py`: SD3.5 service functions
+- `test_stability_upscale.py`: upscale service functions
+- `test_stability_edit.py`: inpaint, outpaint, search/replace, recolor, and removal services
+- `test_stability_control.py`: sketch, structure, style guide, and style transfer services
+- `test_mask_utils.py`: mask builders and base64 decoding
+- `test_server.py`: server wiring, tool registration, and validation helpers
+- `test_server_tools.py`: invocation tests for every registered MCP tool
 
 ## Running Tests
 
-You can run the tests using the provided `run_tests.sh` script in the parent directory:
-
 ```bash
-cd src/nova-canvas-mcp-server
-./run_tests.sh
+uv run pytest
 ```
 
-This script will:
-1. Set up the Python environment
-2. Install any missing dependencies
-3. Run the tests with pytest
-4. Generate a coverage report
-5. Run code quality checks (ruff format, ruff lint, pyright)
+With a coverage report:
 
-## Test Coverage
+```bash
+uv run pytest --cov=awslabs --cov-report=term-missing
+```
 
-The test suite aims to provide comprehensive coverage of the Nova Canvas MCP Server functionality, including:
+The same checks CI runs:
 
-- Validation of input parameters
-- Error handling
-- API interaction
-- Image generation with text prompts
-- Image generation with color guidance
-- File saving functionality
-- MCP server integration
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
+uv run pytest
+```
 
 ## Adding New Tests
 
-When adding new tests, please follow these guidelines:
+1. Use the test file matching the module under test
+2. Mock only at the seams (`invoke_bedrock_model`, `save_images`) and assert on the real
+   request bodies and responses the code builds
+3. Cover both success and error paths, including validation boundaries
+4. Assert that a failing tool reports to `ctx.error` exactly once
+5. Use fixtures from `conftest.py`, and write real temp files rather than patching
+   `os.path.exists` — patching it mutates the shared `os` module and leaks into other tests
+6. Avoid assertions that only re-check a mock the test itself configured
 
-1. Use the appropriate test file based on what you're testing
-2. Follow the existing test patterns
-3. Use descriptive test names that clearly indicate what is being tested
-4. Use fixtures from `conftest.py` where appropriate
-5. Mock external dependencies (e.g., Bedrock runtime client)
-6. Test both success and error cases
+`test_server_tools.py` drives every tool from a single `TOOL_KWARGS` table, so a new tool
+inherits the shared contract tests by adding one entry.

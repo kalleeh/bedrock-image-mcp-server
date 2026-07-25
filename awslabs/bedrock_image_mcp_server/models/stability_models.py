@@ -14,6 +14,11 @@
 """Pydantic models for Stability AI Image Services."""
 
 from .common import OutputFormat
+from awslabs.bedrock_image_mcp_server.consts import (
+    MAX_OUTPAINT_DIRECTION_PIXELS,
+    MAX_PROMPT_LENGTH_SD35,
+    SD35_MAX_SEED,
+)
 from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -41,6 +46,7 @@ class StylePreset(str, Enum):
         PIXEL_ART: Pixel art style.
         TILE_TEXTURE: Seamless tile texture style.
     """
+
     MODEL_3D = '3d-model'
     ANALOG_FILM = 'analog-film'
     ANIME = 'anime'
@@ -76,11 +82,12 @@ class CreativeUpscaleParams(BaseModel):
         style_preset: Optional style preset to apply during upscaling.
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
-    prompt: str = Field(..., min_length=1, max_length=10000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
     creativity: float = Field(default=0.3, ge=0.1, le=0.5)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     style_preset: Optional[StylePreset] = None
     output_format: OutputFormat = OutputFormat.PNG
 
@@ -99,10 +106,11 @@ class ConservativeUpscaleParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -116,6 +124,7 @@ class FastUpscaleParams(BaseModel):
         image: Base64-encoded input image or file path.
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     output_format: OutputFormat = OutputFormat.PNG
 
@@ -136,12 +145,13 @@ class InpaintParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     mask: str
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
     grow_mask: int = Field(default=5, ge=0, le=20)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -163,15 +173,16 @@ class OutpaintParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    left: int = Field(default=0, ge=0, le=2000)
-    right: int = Field(default=0, ge=0, le=2000)
-    up: int = Field(default=0, ge=0, le=2000)
-    down: int = Field(default=0, ge=0, le=2000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    left: int = Field(default=0, ge=0, le=MAX_OUTPAINT_DIRECTION_PIXELS)
+    right: int = Field(default=0, ge=0, le=MAX_OUTPAINT_DIRECTION_PIXELS)
+    up: int = Field(default=0, ge=0, le=MAX_OUTPAINT_DIRECTION_PIXELS)
+    down: int = Field(default=0, ge=0, le=MAX_OUTPAINT_DIRECTION_PIXELS)
     creativity: float = Field(default=0.5, ge=0.0, le=1.0)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -189,11 +200,12 @@ class SearchReplaceParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
-    search_prompt: str = Field(..., min_length=1, max_length=10000)
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    search_prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -213,11 +225,12 @@ class SearchRecolorParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
-    select_prompt: str = Field(..., min_length=1, max_length=10000)
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    select_prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -234,10 +247,11 @@ class RemoveObjectParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     mask: str
     grow_mask: int = Field(default=5, ge=0, le=20)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG
 
 
@@ -250,6 +264,7 @@ class BackgroundRemovalParams(BaseModel):
     Attributes:
         image: Base64-encoded input image or file path.
     """
+
     image: str
 
 
@@ -259,25 +274,21 @@ class SketchToImageParams(BaseModel):
     Sketch-to-image converts sketches or line art into detailed images while
     preserving the structure and composition of the original sketch.
 
-    Note: AWS API expects 'image' parameter, not 'control_image'.
-
     Attributes:
-        control_image: Base64-encoded sketch/line art image or file path (aliased to 'image' for API).
+        control_image: Base64-encoded sketch/line art image or file path.
         prompt: Description of desired output style and content (1-10,000 chars).
         control_strength: How closely to follow the sketch (0.0-1.0). Higher = stricter adherence.
         negative_prompt: Elements to exclude from the generated image.
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
-    control_image: str = Field(..., alias='image')
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
-    output_format: OutputFormat = OutputFormat.PNG
 
-    class Config:
-        populate_by_name = True  # Allow both 'control_image' and 'image'
+    control_image: str
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
+    output_format: OutputFormat = OutputFormat.PNG
 
 
 class StructureControlParams(BaseModel):
@@ -286,25 +297,21 @@ class StructureControlParams(BaseModel):
     Structure control generates images that follow structural guides like edge maps
     or depth maps, maintaining specific compositions while adding detail and style.
 
-    Note: AWS API expects 'image' parameter, not 'control_image'.
-
     Attributes:
-        control_image: Base64-encoded structure/edge map image or file path (aliased to 'image' for API).
+        control_image: Base64-encoded structure/edge map image or file path.
         prompt: Description of desired output style and content (1-10,000 chars).
         control_strength: How closely to follow the structure (0.0-1.0). Higher = stricter adherence.
         negative_prompt: Elements to exclude from the generated image.
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output format (jpeg, png, webp).
     """
-    control_image: str = Field(..., alias='image')
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
-    output_format: OutputFormat = OutputFormat.PNG
 
-    class Config:
-        populate_by_name = True  # Allow both 'control_image' and 'image'
+    control_image: str
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
+    output_format: OutputFormat = OutputFormat.PNG
 
 
 class StyleGuideParams(BaseModel):
@@ -314,25 +321,21 @@ class StyleGuideParams(BaseModel):
     the content description in the prompt. The fidelity parameter controls
     how closely the output matches the reference style.
 
-    Note: AWS API expects 'image' parameter, not 'reference_image'.
-
     Attributes:
-        reference_image: Base64-encoded reference image for style guidance or file path (aliased to 'image' for API).
+        reference_image: Base64-encoded reference image for style guidance or file path.
         prompt: Description of desired content (1-10,000 chars).
         fidelity: How closely to match reference style (0.0-1.0). Higher = closer match.
         negative_prompt: Elements to exclude from the generated image.
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
-    reference_image: str = Field(..., alias='image')
-    prompt: str = Field(..., min_length=1, max_length=10000)
-    fidelity: float = Field(default=0.5, ge=0.0, le=1.0)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
-    output_format: OutputFormat = OutputFormat.PNG
 
-    class Config:
-        populate_by_name = True  # Allow both 'reference_image' and 'image'
+    reference_image: str
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
+    fidelity: float = Field(default=0.5, ge=0.0, le=1.0)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
+    output_format: OutputFormat = OutputFormat.PNG
 
 
 class StyleTransferParams(BaseModel):
@@ -352,12 +355,13 @@ class StyleTransferParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     init_image: str
     style_image: str
-    prompt: str = Field(..., min_length=1, max_length=10000)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH_SD35)
     composition_fidelity: float = Field(default=0.9, ge=0.0, le=1.0)
     style_strength: float = Field(default=1.0, ge=0.0, le=1.0)
     change_strength: float = Field(default=0.9, ge=0.0, le=1.0)
-    negative_prompt: Optional[str] = Field(None, max_length=10000)
-    seed: int = Field(default=0, ge=0, le=4294967294)
+    negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
+    seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     output_format: OutputFormat = OutputFormat.PNG

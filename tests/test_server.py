@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the server module of the nova-canvas-mcp-server."""
+"""Tests for the server module of the bedrock-image-mcp-server."""
 
 import pytest
 from awslabs.bedrock_image_mcp_server.server import (
@@ -90,8 +90,8 @@ class TestMcpGenerateImage:
         with pytest.raises(Exception, match='Failed to generate image: API error'):
             await mcp_generate_image(ctx=mock_context, prompt=sample_text_prompt)
 
-        # Check that ctx.error was called with the expected error message
-        assert mock_context.error.call_count == 2
+        # Check that ctx.error reported the failure exactly once
+        assert mock_context.error.call_count == 1
         assert 'Failed to generate image: API error' in str(mock_context.error.call_args_list)
 
     @pytest.mark.asyncio
@@ -138,7 +138,7 @@ class TestMcpGenerateImage:
 
         # Check that ctx.error was called with the expected error message
         assert mock_context.error.call_count == 1
-        assert 'Error generating image: Unexpected error' in str(mock_context.error.call_args_list)
+        assert 'Unexpected error' in str(mock_context.error.call_args_list)
 
 
 class TestMcpGenerateImageWithColors:
@@ -219,8 +219,8 @@ class TestMcpGenerateImageWithColors:
                 ctx=mock_context, prompt=sample_text_prompt, colors=sample_colors
             )
 
-        # Check that ctx.error was called with the expected error message
-        assert mock_context.error.call_count == 2
+        # Check that ctx.error reported the failure exactly once
+        assert mock_context.error.call_count == 1
         assert 'Failed to generate color-guided image: API error' in str(
             mock_context.error.call_args_list
         )
@@ -274,79 +274,122 @@ class TestMcpGenerateImageWithColors:
 
         # Check that ctx.error was called with the expected error message
         assert mock_context.error.call_count == 1
-        assert 'Error generating color-guided image: Unexpected error' in str(
-            mock_context.error.call_args_list
-        )
+        assert 'Unexpected error' in str(mock_context.error.call_args_list)
 
 
 class TestServerIntegration:
     """Integration tests for the server module."""
 
-    def test_server_tool_registration(self):
-        """Test that all 17 server tools are registered correctly."""
-        from awslabs.bedrock_image_mcp_server.server import (
-            mcp_generate_image,
-            mcp_generate_image_sd35,
-            mcp_generate_image_with_colors,
-            mcp_inpaint,
-            mcp_outpaint,
-            mcp_remove_background,
-            mcp_remove_object,
-            mcp_search_recolor,
-            mcp_search_replace,
-            mcp_sketch_to_image,
-            mcp_structure_control,
-            mcp_style_guide,
-            mcp_style_transfer,
-            mcp_transform_image_sd35,
-            mcp_upscale_conservative,
-            mcp_upscale_creative,
-            mcp_upscale_fast,
-        )
+    async def test_expected_tools_are_registered(self):
+        """Test that every expected tool name is registered with the MCP server."""
+        from awslabs.bedrock_image_mcp_server.server import mcp
 
-        # List of all tools with their expected docstring content
-        tools = [
-            # Nova Canvas (2)
-            (mcp_generate_image, 'Generate an image using Amazon Nova Canvas with text prompt'),
-            (mcp_generate_image_with_colors, 'Generate an image using Amazon Nova Canvas with color guidance'),
-            # SD3.5 (2)
-            (mcp_generate_image_sd35, 'Generate an image using Stable Diffusion 3.5 Large'),
-            (mcp_transform_image_sd35, 'Transform an existing image using Stable Diffusion 3.5 Large'),
-            # Upscale (3)
-            (mcp_upscale_creative, 'Upscale images to 4K with creative AI enhancement'),
-            (mcp_upscale_conservative, 'Upscale images to 4K while preserving original details'),
-            (mcp_upscale_fast, 'Fast 4x upscaling'),
-            # Edit (6)
-            (mcp_inpaint, 'Fill masked regions with AI-generated content'),
-            (mcp_outpaint, 'Extend images beyond their original boundaries'),
-            (mcp_search_replace, 'Find and replace objects'),
-            (mcp_search_recolor, 'Recolor specific objects'),
-            (mcp_remove_object, 'Remove unwanted objects'),
-            (mcp_remove_background, 'Automatically remove backgrounds'),
-            # Control (4)
-            (mcp_sketch_to_image, 'Convert sketches or line art into detailed images'),
-            (mcp_structure_control, 'Generate images following structural guides'),
-            (mcp_style_guide, 'Generate images matching a reference style'),
-            (mcp_style_transfer, 'Apply style from one image to the content of another'),
-        ]
+        expected = {
+            'generate_image',
+            'generate_image_with_colors',
+            'generate_image_sd35',
+            'transform_image_sd35',
+            'upscale_creative',
+            'upscale_conservative',
+            'upscale_fast',
+            'inpaint_image',
+            'outpaint_image',
+            'search_and_replace',
+            'search_and_recolor',
+            'remove_object',
+            'remove_background',
+            'sketch_to_image',
+            'structure_control',
+            'style_guide',
+            'style_transfer',
+            'create_rectangular_mask',
+            'create_ellipse_mask',
+            'create_full_mask',
+        }
 
-        # Verify all 17 tools are registered with correct docstrings
-        assert len(tools) == 17, f"Expected 17 tools, found {len(tools)}"
+        registered = {tool.name for tool in await mcp.list_tools()}
 
-        for tool_func, expected_doc_content in tools:
-            # Check that the tool is registered
-            assert hasattr(tool_func, '__name__'), f"Tool {tool_func} missing __name__ attribute"
+        assert expected == registered
 
-            # Check that the function has the correct docstring
-            assert tool_func.__doc__ is not None, f"Tool {tool_func.__name__} missing docstring"
-            assert expected_doc_content in tool_func.__doc__, \
-                f"Tool {tool_func.__name__} docstring doesn't contain expected content: {expected_doc_content}"
-
-        # Verify workspace_dir parameter exists in all tools
+    async def test_registered_tools_expose_required_parameters(self):
+        """Test that every registered tool accepts workspace_dir and reports errors via ctx."""
         import inspect
-        for tool_func, _ in tools:
-            sig = inspect.signature(tool_func)
-            assert 'workspace_dir' in sig.parameters, \
-                f"Tool {tool_func.__name__} missing workspace_dir parameter"
-            assert 'ctx' in sig.parameters, \
-                f"Tool {tool_func.__name__} missing ctx parameter for error reporting"
+        from awslabs.bedrock_image_mcp_server.server import mcp
+
+        for tool in await mcp.list_tools():
+            registered = mcp._tool_manager.get_tool(tool.name)
+            assert registered is not None, f'Tool {tool.name} not resolvable from the registry'
+            sig = inspect.signature(registered.fn)
+            assert 'workspace_dir' in sig.parameters, (
+                f'Tool {tool.name} missing workspace_dir parameter'
+            )
+            assert 'ctx' in sig.parameters, (
+                f'Tool {tool.name} missing ctx parameter for error reporting'
+            )
+            assert tool.description, f'Tool {tool.name} missing description'
+
+
+class TestValidationHelpers:
+    """Tests for the shared parameter-validation helpers."""
+
+    def test_output_format_is_case_insensitive(self):
+        """Test that uppercase format names are accepted."""
+        from awslabs.bedrock_image_mcp_server.server import parse_output_format
+
+        assert parse_output_format('PNG').value == 'png'
+        assert parse_output_format('webp').value == 'webp'
+
+    def test_invalid_output_format_lists_valid_options(self):
+        """Test that an unsupported format raises and names the supported ones."""
+        from awslabs.bedrock_image_mcp_server.server import parse_output_format
+
+        with pytest.raises(ValueError, match='jpeg, png, webp'):
+            parse_output_format('tiff')
+
+    def test_invalid_aspect_ratio_lists_valid_options(self):
+        """Test that an unsupported aspect ratio raises and names the supported ones."""
+        from awslabs.bedrock_image_mcp_server.server import parse_aspect_ratio
+
+        with pytest.raises(ValueError, match='16:9'):
+            parse_aspect_ratio('BOGUS')
+
+
+class TestErrorsAreReportedOnce:
+    """Tests that a failing tool reports to the MCP context exactly once."""
+
+    async def test_invalid_aspect_ratio_reports_once(self, mock_context):
+        """Test the SD3.5 aspect-ratio failure is not double-reported to the client."""
+        from awslabs.bedrock_image_mcp_server.server import mcp_generate_image_sd35
+
+        with pytest.raises(ValueError, match='Invalid aspect ratio'):
+            await mcp_generate_image_sd35(
+                ctx=mock_context,
+                prompt='a cat',
+                aspect_ratio='BOGUS',
+                negative_prompt=None,
+                seed=0,
+                output_format='png',
+                workspace_dir=None,
+                filename=None,
+            )
+
+        assert mock_context.error.call_count == 1
+
+    async def test_invalid_output_format_reports_once(self, mock_context):
+        """Test a control tool's format failure is not double-reported to the client."""
+        from awslabs.bedrock_image_mcp_server.server import mcp_sketch_to_image
+
+        with pytest.raises(ValueError, match='Invalid output format'):
+            await mcp_sketch_to_image(
+                ctx=mock_context,
+                sketch='x' * 100,
+                prompt='a cat',
+                control_strength=0.7,
+                negative_prompt=None,
+                seed=0,
+                output_format='tiff',
+                workspace_dir=None,
+                filename=None,
+            )
+
+        assert mock_context.error.call_count == 1

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the novacanvas module of the nova-canvas-mcp-server."""
+"""Tests for the Nova Canvas service of the bedrock-image-mcp-server."""
 
 import base64
 import json
@@ -27,57 +27,59 @@ from awslabs.bedrock_image_mcp_server.consts import (
     NOVA_CANVAS_MODEL_ID,
 )
 from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
-from awslabs.bedrock_image_mcp_server.novacanvas import (
+from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    invoke_bedrock_model,
+    save_images,
+)
+from awslabs.bedrock_image_mcp_server.services.nova_canvas import (
     generate_image_with_colors,
     generate_image_with_text,
-    invoke_nova_canvas,
-    save_generated_images,
 )
 from unittest.mock import patch
 
 
-class TestSaveGeneratedImages:
-    """Tests for the save_generated_images function."""
+class TestSaveImages:
+    """Tests for the save_images function."""
 
-    def test_save_images_with_filename(self, temp_workspace_dir, sample_base64_images):
-        """Test saving images with a specified filename."""
-        result = save_generated_images(
+    def test_save_images_honors_prefix(self, temp_workspace_dir, sample_base64_images):
+        """Test saving images with a caller-supplied filename prefix."""
+        paths = save_images(
             base64_images=sample_base64_images,
-            filename='test_image',
-            number_of_images=2,
             workspace_dir=temp_workspace_dir,
+            filename_prefix='test_image',
+            output_format=OutputFormat.PNG,
         )
 
         # Check that the paths are returned correctly
-        assert len(result['paths']) == 2
-        assert all(os.path.exists(path) for path in result['paths'])
-        # Note: filename parameter is ignored in the new implementation, random names are generated
-        assert all(os.path.basename(path).startswith('nova_canvas_') for path in result['paths'])
-        assert all(path.endswith('.png') for path in result['paths'])
+        assert len(paths) == 2
+        assert all(os.path.exists(path) for path in paths)
+        assert all(os.path.basename(path).startswith('test_image_') for path in paths)
+        assert all(path.endswith('.png') for path in paths)
 
         # Check that the images were saved with the correct content
-        for i, path in enumerate(result['paths']):
+        for i, path in enumerate(paths):
             with open(path, 'rb') as f:
                 content = f.read()
                 assert content == b'mock_image_data_' + str(i + 1).encode()
 
-    def test_save_images_without_filename(self, temp_workspace_dir, sample_base64_images):
-        """Test saving images without a specified filename."""
-        result = save_generated_images(
+    def test_save_images_generates_unique_names(self, temp_workspace_dir, sample_base64_images):
+        """Test that each saved image gets its own generated filename."""
+        paths = save_images(
             base64_images=sample_base64_images,
-            filename=None,
-            number_of_images=2,
             workspace_dir=temp_workspace_dir,
+            filename_prefix='nova_canvas',
+            output_format=OutputFormat.PNG,
         )
 
         # Check that the paths are returned correctly
-        assert len(result['paths']) == 2
-        assert all(os.path.exists(path) for path in result['paths'])
-        assert all(os.path.basename(path).startswith('nova_canvas_') for path in result['paths'])
-        assert all(path.endswith('.png') for path in result['paths'])
+        assert len(paths) == 2
+        assert len(set(paths)) == 2
+        assert all(os.path.exists(path) for path in paths)
+        assert all(os.path.basename(path).startswith('nova_canvas_') for path in paths)
+        assert all(path.endswith('.png') for path in paths)
 
         # Check that the images were saved with the correct content
-        for i, path in enumerate(result['paths']):
+        for i, path in enumerate(paths):
             with open(path, 'rb') as f:
                 content = f.read()
                 assert content == b'mock_image_data_' + str(i + 1).encode()
@@ -86,22 +88,21 @@ class TestSaveGeneratedImages:
         """Test saving a single image."""
         base64_image = base64.b64encode(b'mock_single_image_data').decode('utf-8')
 
-        result = save_generated_images(
+        paths = save_images(
             base64_images=[base64_image],
-            filename='single_image',
-            number_of_images=1,
             workspace_dir=temp_workspace_dir,
+            filename_prefix='nova_canvas',
+            output_format=OutputFormat.PNG,
         )
 
         # Check that the path is returned correctly
-        assert len(result['paths']) == 1
-        assert os.path.exists(result['paths'][0])
-        # Note: filename parameter is ignored in the new implementation, random names are generated
-        assert os.path.basename(result['paths'][0]).startswith('nova_canvas_')
-        assert os.path.basename(result['paths'][0]).endswith('.png')
+        assert len(paths) == 1
+        assert os.path.exists(paths[0])
+        assert os.path.basename(paths[0]).startswith('nova_canvas_')
+        assert os.path.basename(paths[0]).endswith('.png')
 
         # Check that the image was saved with the correct content
-        with open(result['paths'][0], 'rb') as f:
+        with open(paths[0], 'rb') as f:
             content = f.read()
             assert content == b'mock_single_image_data'
 
@@ -111,11 +112,11 @@ class TestSaveGeneratedImages:
         nested_dir = os.path.join(temp_workspace_dir, 'nested', 'dir')
 
         # Use only one base64 image for this test
-        result = save_generated_images(
+        paths = save_images(
             base64_images=[sample_base64_images[0]],
-            filename='test_image',
-            number_of_images=1,
             workspace_dir=nested_dir,
+            filename_prefix='nova_canvas',
+            output_format=OutputFormat.PNG,
         )
 
         # Check that the output directory was created
@@ -123,13 +124,13 @@ class TestSaveGeneratedImages:
         assert os.path.exists(output_dir)
 
         # Check that the image was saved in the correct location
-        assert len(result['paths']) == 1
-        assert os.path.exists(result['paths'][0])
-        assert os.path.dirname(result['paths'][0]) == os.path.abspath(output_dir)
+        assert len(paths) == 1
+        assert os.path.exists(paths[0])
+        assert os.path.dirname(paths[0]) == os.path.realpath(output_dir)
 
 
-class TestInvokeNovaCanvas:
-    """Tests for the invoke_nova_canvas function."""
+class TestInvokeBedrockModel:
+    """Tests for invoking the Nova Canvas model through invoke_bedrock_model."""
 
     @pytest.mark.asyncio
     async def test_successful_invocation(
@@ -149,7 +150,11 @@ class TestInvokeNovaCanvas:
             },
         }
 
-        result = await invoke_nova_canvas(request_dict, mock_bedrock_runtime_client)
+        result = await invoke_bedrock_model(
+            model_id=NOVA_CANVAS_MODEL_ID,
+            request_body=request_dict,
+            bedrock_client=mock_bedrock_runtime_client,
+        )
 
         # Check that the API was called with the correct parameters
         mock_bedrock_runtime_client.invoke_model.assert_called_once_with(
@@ -174,7 +179,11 @@ class TestInvokeNovaCanvas:
 
         # Check that the exception is propagated
         with pytest.raises(Exception, match='API error'):
-            await invoke_nova_canvas(request_dict, mock_bedrock_runtime_client)
+            await invoke_bedrock_model(
+                model_id=NOVA_CANVAS_MODEL_ID,
+                request_body=request_dict,
+                bedrock_client=mock_bedrock_runtime_client,
+            )
 
 
 class TestGenerateImageWithText:
@@ -234,7 +243,7 @@ class TestGenerateImageWithText:
         mock_save_images.assert_called_once_with(
             base64_images=['base64_image_1', 'base64_image_2'],
             workspace_dir=temp_workspace_dir,
-            filename_prefix='nova_canvas',
+            filename_prefix='test_image',
             output_format=OutputFormat.PNG,
         )
 
@@ -277,8 +286,8 @@ class TestGenerateImageWithText:
         assert request_body['textToImageParams']['negativeText'] == sample_negative_prompt
 
     @pytest.mark.asyncio
-    @patch('awslabs.bedrock_image_mcp_server.novacanvas.invoke_nova_canvas')
-    async def test_validation_error(self, mock_invoke_nova_canvas, mock_bedrock_runtime_client):
+    @patch('awslabs.bedrock_image_mcp_server.services.nova_canvas.invoke_bedrock_model')
+    async def test_validation_error(self, mock_invoke_bedrock, mock_bedrock_runtime_client):
         """Test handling of validation errors."""
         # Call the function with invalid parameters
         result = await generate_image_with_text(
@@ -293,8 +302,8 @@ class TestGenerateImageWithText:
         assert result.prompt == ''
         assert result.negative_prompt is None
 
-        # Check that invoke_nova_canvas was not called
-        mock_invoke_nova_canvas.assert_not_called()
+        # Check that invoke_bedrock_model was not called
+        mock_invoke_bedrock.assert_not_called()
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.services.nova_canvas.invoke_bedrock_model')
@@ -413,7 +422,7 @@ class TestGenerateImageWithColors:
         mock_save_images.assert_called_once_with(
             base64_images=['base64_image_1', 'base64_image_2'],
             workspace_dir=temp_workspace_dir,
-            filename_prefix='nova_canvas_color',
+            filename_prefix='test_image',
             output_format=OutputFormat.PNG,
         )
 
@@ -457,12 +466,14 @@ class TestGenerateImageWithColors:
         request_body = call_args['request_body']
         assert request_body['colorGuidedGenerationParams']['text'] == sample_text_prompt
         assert request_body['colorGuidedGenerationParams']['colors'] == sample_colors
-        assert request_body['colorGuidedGenerationParams']['negativeText'] == sample_negative_prompt
+        assert (
+            request_body['colorGuidedGenerationParams']['negativeText'] == sample_negative_prompt
+        )
 
     @pytest.mark.asyncio
-    @patch('awslabs.bedrock_image_mcp_server.novacanvas.invoke_nova_canvas')
+    @patch('awslabs.bedrock_image_mcp_server.services.nova_canvas.invoke_bedrock_model')
     async def test_validation_error(
-        self, mock_invoke_nova_canvas, mock_bedrock_runtime_client, sample_text_prompt
+        self, mock_invoke_bedrock, mock_bedrock_runtime_client, sample_text_prompt
     ):
         """Test handling of validation errors."""
         # Call the function with invalid parameters
@@ -479,8 +490,8 @@ class TestGenerateImageWithColors:
         assert result.prompt == sample_text_prompt
         assert result.colors == ['invalid_color']
 
-        # Check that invoke_nova_canvas was not called
-        mock_invoke_nova_canvas.assert_not_called()
+        # Check that invoke_bedrock_model was not called
+        mock_invoke_bedrock.assert_not_called()
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.services.nova_canvas.invoke_bedrock_model')

@@ -18,9 +18,7 @@ search and replace, search and recolor, object removal, and background removal.
 """
 
 import io
-import os
 from awslabs.bedrock_image_mcp_server.consts import (
-    MIN_IMAGE_DIMENSION,
     STABLE_ERASE_OBJECT_MODEL_ID,
     STABLE_INPAINT_MODEL_ID,
     STABLE_OUTPAINT_MODEL_ID,
@@ -38,14 +36,14 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     SearchReplaceParams,
 )
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    finalize_image_response,
     invoke_bedrock_model,
+    measure_image,
+    prepare_image,
+    resolve_image_input,
     save_images,
 )
-from awslabs.bedrock_image_mcp_server.utils.image_utils import (
-    decode_base64_image,
-    encode_image_file,
-    validate_image_dimensions,
-)
+from awslabs.bedrock_image_mcp_server.utils.image_utils import decode_base64_image
 from loguru import logger
 from PIL import Image
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -72,27 +70,28 @@ def _validate_mask(mask_base64: str, image_base64: str) -> None:
     image_bytes = decode_base64_image(image_base64)
 
     # Open images with PIL
-    mask_img = Image.open(io.BytesIO(mask_bytes))
-    input_img = Image.open(io.BytesIO(image_bytes))
+    with Image.open(io.BytesIO(mask_bytes)) as mask_img:
+        with Image.open(io.BytesIO(image_bytes)) as input_img:
+            mask_size = mask_img.size
+            input_size = input_img.size
+            mask_mode = mask_img.mode
 
     # Check dimensions match
-    if mask_img.size != input_img.size:
-        raise ValueError(
-            f'Mask dimensions {mask_img.size} do not match image dimensions {input_img.size}'
-        )
+    if mask_size != input_size:
+        raise ValueError(f'Mask dimensions {mask_size} do not match image dimensions {input_size}')
 
     # Check mask is grayscale or can be converted
-    if mask_img.mode not in ('L', 'LA', 'RGB', 'RGBA'):
-        raise ValueError(f'Invalid mask format: {mask_img.mode}. Must be grayscale or RGB.')
+    if mask_mode not in ('L', 'LA', 'RGB', 'RGBA'):
+        raise ValueError(f'Invalid mask format: {mask_mode}. Must be grayscale or RGB.')
 
-    logger.debug(f'Mask validation passed: {mask_img.size}, mode={mask_img.mode}')
+    logger.debug(f'Mask validation passed: {mask_size}, mode={mask_mode}')
 
 
 async def inpaint(
     params: InpaintParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Fill masked regions with AI-generated content.
 
@@ -122,36 +121,15 @@ async def inpaint(
     """
     logger.info('Starting inpaint')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
+    image_base64 = resolve_image_input(params.image)
+    mask_base64 = resolve_image_input(params.mask, 'mask')
 
-    # Handle mask input (file path or base64)
-    if os.path.exists(params.mask):
-        logger.debug(f'Encoding mask from file: {params.mask}')
-        mask_base64 = encode_image_file(params.mask)
-    else:
-        logger.debug('Using provided base64 mask')
-        mask_base64 = params.mask
-
-    # Validate mask
     _validate_mask(mask_base64, image_base64)
 
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    width, height = measure_image(image_base64)
 
     logger.info(f'Input image dimensions: {width}x{height}')
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'mask': mask_base64,
@@ -161,63 +139,36 @@ async def inpaint(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
-        model_id=STABLE_INPAINT_MODEL_ID,
-        request_body=request_body,
-        bedrock_client=bedrock_client
+        model_id=STABLE_INPAINT_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from inpaint')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_INPAINT_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed
-        )
-
-    # Save images
-    filename_prefix = filename or 'inpaint'
-    saved_paths = save_images(
-        base64_images=images,
+    return await finalize_image_response(
+        result=result,
+        model_id=STABLE_INPAINT_MODEL_ID,
+        operation='inpaint',
+        saver=save_images,
+        default_prefix='inpaint',
+        filename=filename,
         workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format
-    )
-
-    logger.info(f'Inpaint completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully inpainted image',
-        paths=saved_paths,
-        model_id=STABLE_INPAINT_MODEL_ID,
+        output_format=params.output_format,
+        success_message='Successfully inpainted image',
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'grow_mask': params.grow_mask,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'grow_mask': params.grow_mask, 'dimensions': f'{width}x{height}'},
     )
-
 
 
 async def outpaint(
     params: OutpaintParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Extend images beyond their original boundaries.
 
@@ -245,27 +196,14 @@ async def outpaint(
     """
     logger.info('Starting outpaint')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    image_base64, width, height = await prepare_image(params.image)
 
     logger.info(f'Input image dimensions: {width}x{height}')
-    logger.info(f'Outpaint directions: left={params.left}, right={params.right}, '
-                f'up={params.up}, down={params.down}')
+    logger.info(
+        f'Outpaint directions: left={params.left}, right={params.right}, '
+        f'up={params.up}, down={params.down}'
+    )
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'prompt': params.prompt,
@@ -278,55 +216,32 @@ async def outpaint(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
-        model_id=STABLE_OUTPAINT_MODEL_ID,
-        request_body=request_body,
-        bedrock_client=bedrock_client
+        model_id=STABLE_OUTPAINT_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from outpaint')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_OUTPAINT_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed
-        )
-
-    # Save images
-    filename_prefix = filename or 'outpaint'
-    saved_paths = save_images(
-        base64_images=images,
+    return await finalize_image_response(
+        result=result,
+        model_id=STABLE_OUTPAINT_MODEL_ID,
+        operation='outpaint',
+        saver=save_images,
+        default_prefix='outpaint',
+        filename=filename,
         workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format
-    )
-
-    logger.info(f'Outpaint completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully outpainted image',
-        paths=saved_paths,
-        model_id=STABLE_OUTPAINT_MODEL_ID,
+        output_format=params.output_format,
+        success_message='Successfully outpainted image',
         prompt=params.prompt,
         seed=params.seed,
         metadata={
             'creativity': params.creativity,
             'input_dimensions': f'{width}x{height}',
-            'expansion': f'left={params.left}, right={params.right}, up={params.up}, down={params.down}'
-        }
+            'expansion': f'left={params.left}, right={params.right}, up={params.up}, down={params.down}',
+        },
     )
 
 
@@ -334,7 +249,7 @@ async def search_and_replace(
     params: SearchReplaceParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Find and replace objects using text prompts.
 
@@ -362,27 +277,12 @@ async def search_and_replace(
     """
     logger.info('Starting search and replace')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    image_base64, width, height = await prepare_image(params.image)
 
     logger.info(f'Input image dimensions: {width}x{height}')
     logger.info(f'Search prompt: "{params.search_prompt}"')
     logger.info(f'Replace prompt: "{params.prompt}"')
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'search_prompt': params.search_prompt,
@@ -391,54 +291,30 @@ async def search_and_replace(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from search and replace')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed
-        )
-
-    # Save images
-    filename_prefix = filename or 'search_replace'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format
-    )
-
-    logger.info(f'Search and replace completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully replaced objects in image',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
+        operation='search and replace',
+        saver=save_images,
+        default_prefix='search_replace',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully replaced objects in image',
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'search_prompt': params.search_prompt,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'search_prompt': params.search_prompt, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -446,7 +322,7 @@ async def search_and_recolor(
     params: SearchRecolorParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Recolor objects using text prompts.
 
@@ -476,27 +352,13 @@ async def search_and_recolor(
     """
     logger.info('Starting search and recolor')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    image_base64, width, height = await prepare_image(params.image)
 
     logger.info(f'Input image dimensions: {width}x{height}')
     logger.info(f'Select prompt: "{params.select_prompt}"')
     logger.info(f'Recolor prompt: "{params.prompt}"')
 
-    # Build request body (note: uses select_prompt, not search_prompt)
+    # Note: this model uses select_prompt, not search_prompt
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'select_prompt': params.select_prompt,
@@ -505,54 +367,30 @@ async def search_and_recolor(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from search and recolor')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed
-        )
-
-    # Save images
-    filename_prefix = filename or 'search_recolor'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format
-    )
-
-    logger.info(f'Search and recolor completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully recolored objects in image',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
+        operation='search and recolor',
+        saver=save_images,
+        default_prefix='search_recolor',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully recolored objects in image',
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'select_prompt': params.select_prompt,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'select_prompt': params.select_prompt, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -560,7 +398,7 @@ async def remove_object(
     params: RemoveObjectParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Remove unwanted objects from images.
 
@@ -589,36 +427,15 @@ async def remove_object(
     """
     logger.info('Starting remove object')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
+    image_base64 = resolve_image_input(params.image)
+    mask_base64 = resolve_image_input(params.mask, 'mask')
 
-    # Handle mask input (file path or base64)
-    if os.path.exists(params.mask):
-        logger.debug(f'Encoding mask from file: {params.mask}')
-        mask_base64 = encode_image_file(params.mask)
-    else:
-        logger.debug('Using provided base64 mask')
-        mask_base64 = params.mask
-
-    # Validate mask
     _validate_mask(mask_base64, image_base64)
 
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    width, height = measure_image(image_base64)
 
     logger.info(f'Input image dimensions: {width}x{height}')
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'mask': mask_base64,
@@ -629,46 +446,24 @@ async def remove_object(
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_ERASE_OBJECT_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from remove object')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_ERASE_OBJECT_MODEL_ID,
-            seed=params.seed
-        )
-
-    # Save images
-    filename_prefix = filename or 'remove_object'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format
-    )
-
-    logger.info(f'Remove object completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully removed object from image',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_ERASE_OBJECT_MODEL_ID,
+        operation='remove object',
+        saver=save_images,
+        default_prefix='remove_object',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully removed object from image',
         seed=params.seed,
-        metadata={
-            'grow_mask': params.grow_mask,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'grow_mask': params.grow_mask, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -676,7 +471,7 @@ async def remove_background(
     params: BackgroundRemovalParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Remove background from image.
 
@@ -704,25 +499,10 @@ async def remove_background(
     """
     logger.info('Starting background removal')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
-    )
+    image_base64, width, height = await prepare_image(params.image)
 
     logger.info(f'Input image dimensions: {width}x{height}')
 
-    # Build request body (simple, no prompt needed)
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'output_format': 'png',  # Always PNG for transparency
@@ -730,42 +510,21 @@ async def remove_background(
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from background removal')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID
-        )
-
-    # Save images (always PNG for transparency)
-    filename_prefix = filename or 'remove_background'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=OutputFormat.PNG
-    )
-
-    logger.info(f'Background removal completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully removed background from image',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID,
-        metadata={
-            'input_dimensions': f'{width}x{height}',
-            'output_format': 'png'
-        }
+        operation='background removal',
+        saver=save_images,
+        default_prefix='remove_background',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=OutputFormat.PNG,
+        success_message='Successfully removed background from image',
+        metadata={'input_dimensions': f'{width}x{height}', 'output_format': 'png'},
     )
