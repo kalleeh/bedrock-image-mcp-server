@@ -84,6 +84,7 @@ async def generate_image_with_text(
         seed: Seed for generation (0-858,993,459). Random if not provided.
         number_of_images: The number of images to generate (1-5).
         workspace_dir: Directory where the images should be saved. If None, uses current directory.
+        style: Optional Nova Canvas style preset to apply.
 
     Returns:
         ImageGenerationResponse: An object containing the paths to the generated images
