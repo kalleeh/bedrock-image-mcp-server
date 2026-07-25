@@ -17,9 +17,7 @@ This module provides control-based image generation services including
 sketch-to-image, structure control, style guide, and style transfer.
 """
 
-import os
 from awslabs.bedrock_image_mcp_server.consts import (
-    MIN_IMAGE_DIMENSION,
     STABLE_CONTROL_SKETCH_MODEL_ID,
     STABLE_CONTROL_STRUCTURE_MODEL_ID,
     STABLE_STYLE_GUIDE_MODEL_ID,
@@ -33,13 +31,12 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     StyleTransferParams,
 )
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    finalize_image_response,
     invoke_bedrock_model,
+    measure_image,
+    prepare_image,
+    resolve_image_input,
     save_images,
-)
-from awslabs.bedrock_image_mcp_server.utils.image_utils import (
-    decode_base64_image,
-    encode_image_file,
-    validate_image_dimensions,
 )
 from loguru import logger
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -83,24 +80,13 @@ async def sketch_to_image(
     """
     logger.info('Starting sketch-to-image')
 
-    # Handle control image input (file path or base64)
-    if os.path.exists(params.control_image):
-        logger.debug(f'Encoding control image from file: {params.control_image}')
-        control_image_base64 = encode_image_file(params.control_image)
-    else:
-        logger.debug('Using provided base64 control image')
-        control_image_base64 = params.control_image
-
-    # Validate control image dimensions
-    control_image_bytes = decode_base64_image(control_image_base64)
-    width, height = validate_image_dimensions(
-        control_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
+    control_image_base64, width, height = await prepare_image(
+        params.control_image, label='control image'
     )
 
     logger.info(f'Control image dimensions: {width}x{height}')
     logger.info(f'Control strength: {params.control_strength}')
 
-    # Build request body
     # Note: AWS API expects 'image' not 'control_image' per AWS documentation
     request_body: Dict[str, Any] = {
         'image': control_image_base64,
@@ -110,48 +96,27 @@ async def sketch_to_image(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_CONTROL_SKETCH_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from sketch-to-image')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_CONTROL_SKETCH_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'sketch_to_image'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Sketch-to-image completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully converted sketch to image',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_CONTROL_SKETCH_MODEL_ID,
+        operation='sketch-to-image',
+        saver=save_images,
+        default_prefix='sketch_to_image',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully converted sketch to image',
         prompt=params.prompt,
         seed=params.seed,
         metadata={
@@ -193,24 +158,13 @@ async def structure_control(
     """
     logger.info('Starting structure control')
 
-    # Handle control image input (file path or base64)
-    if os.path.exists(params.control_image):
-        logger.debug(f'Encoding control image from file: {params.control_image}')
-        control_image_base64 = encode_image_file(params.control_image)
-    else:
-        logger.debug('Using provided base64 control image')
-        control_image_base64 = params.control_image
-
-    # Validate control image dimensions
-    control_image_bytes = decode_base64_image(control_image_base64)
-    width, height = validate_image_dimensions(
-        control_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
+    control_image_base64, width, height = await prepare_image(
+        params.control_image, label='control image'
     )
 
     logger.info(f'Control image dimensions: {width}x{height}')
     logger.info(f'Control strength: {params.control_strength}')
 
-    # Build request body
     # Note: AWS API expects 'image' not 'control_image' per AWS documentation
     request_body: Dict[str, Any] = {
         'image': control_image_base64,
@@ -220,48 +174,27 @@ async def structure_control(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_CONTROL_STRUCTURE_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from structure control')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_CONTROL_STRUCTURE_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'structure_control'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Structure control completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully generated image with structure control',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_CONTROL_STRUCTURE_MODEL_ID,
+        operation='structure control',
+        saver=save_images,
+        default_prefix='structure_control',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully generated image with structure control',
         prompt=params.prompt,
         seed=params.seed,
         metadata={
@@ -304,24 +237,13 @@ async def style_guide(
     """
     logger.info('Starting style guide')
 
-    # Handle reference image input (file path or base64)
-    if os.path.exists(params.reference_image):
-        logger.debug(f'Encoding reference image from file: {params.reference_image}')
-        reference_image_base64 = encode_image_file(params.reference_image)
-    else:
-        logger.debug('Using provided base64 reference image')
-        reference_image_base64 = params.reference_image
-
-    # Validate reference image dimensions
-    reference_image_bytes = decode_base64_image(reference_image_base64)
-    width, height = validate_image_dimensions(
-        reference_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
+    reference_image_base64, width, height = await prepare_image(
+        params.reference_image, label='reference image'
     )
 
     logger.info(f'Reference image dimensions: {width}x{height}')
     logger.info(f'Style fidelity: {params.fidelity}')
 
-    # Build request body
     # Note: AWS API expects 'image' not 'reference_image' per AWS documentation
     request_body: Dict[str, Any] = {
         'image': reference_image_base64,
@@ -331,48 +253,27 @@ async def style_guide(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_STYLE_GUIDE_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from style guide')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_STYLE_GUIDE_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'style_guide'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Style guide completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully generated image with style guide',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_STYLE_GUIDE_MODEL_ID,
+        operation='style guide',
+        saver=save_images,
+        default_prefix='style_guide',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully generated image with style guide',
         prompt=params.prompt,
         seed=params.seed,
         metadata={'fidelity': params.fidelity, 'reference_dimensions': f'{width}x{height}'},
@@ -411,33 +312,11 @@ async def style_transfer(
     """
     logger.info('Starting style transfer')
 
-    # Handle init image input (file path or base64)
-    if os.path.exists(params.init_image):
-        logger.debug(f'Encoding init image from file: {params.init_image}')
-        init_image_base64 = encode_image_file(params.init_image)
-    else:
-        logger.debug('Using provided base64 init image')
-        init_image_base64 = params.init_image
+    init_image_base64 = resolve_image_input(params.init_image, 'init image')
+    style_image_base64 = resolve_image_input(params.style_image, 'style image')
 
-    # Handle style image input (file path or base64)
-    if os.path.exists(params.style_image):
-        logger.debug(f'Encoding style image from file: {params.style_image}')
-        style_image_base64 = encode_image_file(params.style_image)
-    else:
-        logger.debug('Using provided base64 style image')
-        style_image_base64 = params.style_image
-
-    # Validate init image dimensions
-    init_image_bytes = decode_base64_image(init_image_base64)
-    init_width, init_height = validate_image_dimensions(
-        init_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
-    )
-
-    # Validate style image dimensions
-    style_image_bytes = decode_base64_image(style_image_base64)
-    style_width, style_height = validate_image_dimensions(
-        style_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
-    )
+    init_width, init_height = measure_image(init_image_base64)
+    style_width, style_height = measure_image(style_image_base64)
 
     logger.info(f'Init image dimensions: {init_width}x{init_height}')
     logger.info(f'Style image dimensions: {style_width}x{style_height}')
@@ -447,7 +326,6 @@ async def style_transfer(
         f'Change strength: {params.change_strength}'
     )
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'init_image': init_image_base64,
         'style_image': style_image_base64,
@@ -459,48 +337,27 @@ async def style_transfer(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_STYLE_TRANSFER_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from style transfer')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_STYLE_TRANSFER_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'style_transfer'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Style transfer completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully transferred style',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_STYLE_TRANSFER_MODEL_ID,
+        operation='style transfer',
+        saver=save_images,
+        default_prefix='style_transfer',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully transferred style',
         prompt=params.prompt,
         seed=params.seed,
         metadata={

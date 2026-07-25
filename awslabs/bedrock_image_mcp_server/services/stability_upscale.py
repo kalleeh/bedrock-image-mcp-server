@@ -17,13 +17,11 @@ This module provides creative, conservative, and fast upscaling services
 that can upscale images to 4K resolution with various enhancement options.
 """
 
-import os
 from awslabs.bedrock_image_mcp_server.consts import (
     MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS,
     MAX_CREATIVE_UPSCALE_INPUT_PIXELS,
     MAX_FAST_UPSCALE_INPUT_PIXELS,
     MIN_FAST_UPSCALE_INPUT_PIXELS,
-    MIN_IMAGE_DIMENSION,
     STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
     STABLE_UPSCALE_CREATIVE_MODEL_ID,
     STABLE_UPSCALE_FAST_MODEL_ID,
@@ -35,13 +33,10 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     FastUpscaleParams,
 )
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    finalize_image_response,
     invoke_bedrock_model,
+    prepare_image,
     save_images,
-)
-from awslabs.bedrock_image_mcp_server.utils.image_utils import (
-    decode_base64_image,
-    encode_image_file,
-    validate_image_dimensions,
 )
 from loguru import logger
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -67,10 +62,9 @@ async def upscale_creative(
 
     Workflow:
     1. Validate input image (64x64 to 1MP)
-    2. Warn if image too large for creative upscaling
-    3. Build request with creativity parameter
-    4. Invoke creative upscale model
-    5. Save upscaled image
+    2. Build request with creativity parameter
+    3. Invoke creative upscale model
+    4. Save upscaled image
 
     Args:
         params: CreativeUpscaleParams with image, prompt, and creativity settings.
@@ -87,35 +81,12 @@ async def upscale_creative(
     """
     logger.info('Starting creative upscale')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_CREATIVE_UPSCALE_INPUT_PIXELS,
+    image_base64, width, height = await prepare_image(
+        params.image, max_pixels=MAX_CREATIVE_UPSCALE_INPUT_PIXELS
     )
 
-    total_pixels = width * height
-    logger.info(f'Input image dimensions: {width}x{height} ({total_pixels} pixels)')
+    logger.info(f'Input image dimensions: {width}x{height} ({width * height} pixels)')
 
-    # Warn if image is too large for optimal creative upscaling
-    if total_pixels > MAX_CREATIVE_UPSCALE_INPUT_PIXELS:
-        logger.warning(
-            f'Input image has {total_pixels} pixels, exceeding recommended '
-            f'{MAX_CREATIVE_UPSCALE_INPUT_PIXELS} pixels for creative upscaling. '
-            'Consider using conservative upscale for larger images.'
-        )
-
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'prompt': params.prompt,
@@ -124,7 +95,6 @@ async def upscale_creative(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
     if params.style_preset:
@@ -132,42 +102,22 @@ async def upscale_creative(
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_CREATIVE_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from creative upscale')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_UPSCALE_CREATIVE_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'upscale_creative'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Creative upscale completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully upscaled image with creative enhancement',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_UPSCALE_CREATIVE_MODEL_ID,
+        operation='creative upscale',
+        saver=save_images,
+        default_prefix='upscale_creative',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully upscaled image with creative enhancement',
         prompt=params.prompt,
         seed=params.seed,
         metadata={
@@ -211,27 +161,12 @@ async def upscale_conservative(
     """
     logger.info('Starting conservative upscale')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS,
+    image_base64, width, height = await prepare_image(
+        params.image, max_pixels=MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS
     )
 
-    total_pixels = width * height
-    logger.info(f'Input image dimensions: {width}x{height} ({total_pixels} pixels)')
+    logger.info(f'Input image dimensions: {width}x{height} ({width * height} pixels)')
 
-    # Build request body
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'prompt': params.prompt,
@@ -239,48 +174,27 @@ async def upscale_conservative(
         'output_format': params.output_format.value,
     }
 
-    # Add optional parameters
     if params.negative_prompt:
         request_body['negative_prompt'] = params.negative_prompt
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from conservative upscale')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
-            prompt=params.prompt,
-            seed=params.seed,
-        )
-
-    # Save images
-    filename_prefix = filename or 'upscale_conservative'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Conservative upscale completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully upscaled image with detail preservation',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
+        operation='conservative upscale',
+        saver=save_images,
+        default_prefix='upscale_conservative',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully upscaled image with detail preservation',
         prompt=params.prompt,
         seed=params.seed,
         metadata={'input_dimensions': f'{width}x{height}'},
@@ -319,34 +233,19 @@ async def upscale_fast(
     """
     logger.info('Starting fast upscale')
 
-    # Handle image input (file path or base64)
-    if os.path.exists(params.image):
-        logger.debug(f'Encoding image from file: {params.image}')
-        image_base64 = encode_image_file(params.image)
-    else:
-        logger.debug('Using provided base64 image')
-        image_base64 = params.image
-
-    # Validate image dimensions
-    image_bytes = decode_base64_image(image_base64)
-    width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS,
+    image_base64, width, height = await prepare_image(
+        params.image, max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS
     )
 
     total_pixels = width * height
     logger.info(f'Input image dimensions: {width}x{height} ({total_pixels} pixels)')
 
-    # Validate minimum pixels for fast upscale
     if total_pixels < MIN_FAST_UPSCALE_INPUT_PIXELS:
         raise ValueError(
             f'Image has {total_pixels} pixels, below minimum {MIN_FAST_UPSCALE_INPUT_PIXELS} '
             'pixels for fast upscale'
         )
 
-    # Build request body (simple, no prompt needed)
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'output_format': params.output_format.value,
@@ -354,39 +253,21 @@ async def upscale_fast(
 
     logger.debug(f'Request body keys: {list(request_body.keys())}')
 
-    # Invoke Bedrock model
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_FAST_MODEL_ID,
         request_body=request_body,
         bedrock_client=bedrock_client,
     )
 
-    # Extract images from response
-    images = result.get('images', [])
-    if not images:
-        logger.error('No images returned from fast upscale')
-        return ImageGenerationResponse(
-            status='error',
-            message='No images generated',
-            paths=[],
-            model_id=STABLE_UPSCALE_FAST_MODEL_ID,
-        )
-
-    # Save images
-    filename_prefix = filename or 'upscale_fast'
-    saved_paths = save_images(
-        base64_images=images,
-        workspace_dir=workspace_dir,
-        filename_prefix=filename_prefix,
-        output_format=params.output_format,
-    )
-
-    logger.info(f'Fast upscale completed: {len(saved_paths)} image(s) saved')
-
-    return ImageGenerationResponse(
-        status='success',
-        message='Successfully upscaled image 4x',
-        paths=saved_paths,
+    return await finalize_image_response(
+        result=result,
         model_id=STABLE_UPSCALE_FAST_MODEL_ID,
+        operation='fast upscale',
+        saver=save_images,
+        default_prefix='upscale_fast',
+        filename=filename,
+        workspace_dir=workspace_dir,
+        output_format=params.output_format,
+        success_message='Successfully upscaled image 4x',
         metadata={'input_dimensions': f'{width}x{height}', 'upscale_factor': '4x'},
     )

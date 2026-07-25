@@ -17,6 +17,7 @@ This module provides functions for text-to-image and image-to-image generation
 using Stable Diffusion 3.5 Large through AWS Bedrock.
 """
 
+import asyncio
 import base64
 import os
 from awslabs.bedrock_image_mcp_server.consts import SD35_LARGE_MODEL_ID
@@ -108,16 +109,13 @@ async def generate_text_to_image(
         BedrockAPIError: On API failures with detailed error classification.
         ContentFilterError: On content filtering.
     """
-    logger.info(
-        f'Generating SD3.5 text-to-image with aspect ratio: {params.aspect_ratio.value}',
-        extra={
-            'model': 'sd3.5-large',
-            'aspect_ratio': params.aspect_ratio.value,
-            'seed': params.seed,
-            'prompt_length': len(params.prompt),
-            'has_negative_prompt': params.negative_prompt is not None,
-        },
-    )
+    logger.bind(
+        model='sd3.5-large',
+        aspect_ratio=params.aspect_ratio.value,
+        seed=params.seed,
+        prompt_length=len(params.prompt),
+        has_negative_prompt=params.negative_prompt is not None,
+    ).info(f'Generating SD3.5 text-to-image with aspect ratio: {params.aspect_ratio.value}')
 
     try:
         # Build request body
@@ -140,7 +138,8 @@ async def generate_text_to_image(
             filename_prefix = 'sd35'
 
         # Save images
-        saved_paths = save_images(
+        saved_paths = await asyncio.to_thread(
+            save_images,
             base64_images=base64_images,
             workspace_dir=workspace_dir,
             filename_prefix=filename_prefix,
@@ -162,26 +161,20 @@ async def generate_text_to_image(
             },
         )
 
-        logger.info(
-            f'SD3.5 text-to-image generation successful: {len(saved_paths)} image(s)',
-            extra={
-                'model': 'sd3.5-large',
-                'images_count': len(saved_paths),
-                'aspect_ratio': params.aspect_ratio.value,
-                'output_dir': workspace_dir or 'current_directory',
-            },
-        )
+        logger.bind(
+            model='sd3.5-large',
+            images_count=len(saved_paths),
+            aspect_ratio=params.aspect_ratio.value,
+            output_dir=workspace_dir or 'current_directory',
+        ).info(f'SD3.5 text-to-image generation successful: {len(saved_paths)} image(s)')
         return response
 
     except Exception as e:
-        logger.error(
-            f'SD3.5 text-to-image generation failed: {str(e)}',
-            extra={
-                'model': 'sd3.5-large',
-                'error_type': type(e).__name__,
-                'aspect_ratio': params.aspect_ratio.value,
-            },
-        )
+        logger.bind(
+            model='sd3.5-large',
+            error_type=type(e).__name__,
+            aspect_ratio=params.aspect_ratio.value,
+        ).error(f'SD3.5 text-to-image generation failed: {str(e)}')
         raise
 
 
@@ -215,16 +208,13 @@ async def generate_image_to_image(
         BedrockAPIError: On API failures with detailed error classification.
         ContentFilterError: On content filtering.
     """
-    logger.info(
-        f'Generating SD3.5 image-to-image with strength: {params.strength}',
-        extra={
-            'model': 'sd3.5-large',
-            'mode': 'image-to-image',
-            'strength': params.strength,
-            'seed': params.seed,
-            'prompt_length': len(params.prompt),
-        },
-    )
+    logger.bind(
+        model='sd3.5-large',
+        mode='image-to-image',
+        strength=params.strength,
+        seed=params.seed,
+        prompt_length=len(params.prompt),
+    ).info(f'Generating SD3.5 image-to-image with strength: {params.strength}')
 
     try:
         # Handle file path input - convert to base64 if needed
@@ -258,7 +248,8 @@ async def generate_image_to_image(
             filename_prefix = 'sd35_transform'
 
         # Save images
-        saved_paths = save_images(
+        saved_paths = await asyncio.to_thread(
+            save_images,
             base64_images=base64_images,
             workspace_dir=workspace_dir,
             filename_prefix=filename_prefix,
@@ -280,25 +271,19 @@ async def generate_image_to_image(
             },
         )
 
-        logger.info(
-            f'SD3.5 image-to-image transformation successful: {len(saved_paths)} image(s)',
-            extra={
-                'model': 'sd3.5-large',
-                'mode': 'image-to-image',
-                'images_count': len(saved_paths),
-                'strength': params.strength,
-            },
-        )
+        logger.bind(
+            model='sd3.5-large',
+            mode='image-to-image',
+            images_count=len(saved_paths),
+            strength=params.strength,
+        ).info(f'SD3.5 image-to-image transformation successful: {len(saved_paths)} image(s)')
         return response
 
     except Exception as e:
-        logger.error(
-            f'SD3.5 image-to-image transformation failed: {str(e)}',
-            extra={
-                'model': 'sd3.5-large',
-                'mode': 'image-to-image',
-                'error_type': type(e).__name__,
-                'strength': params.strength,
-            },
-        )
+        logger.bind(
+            model='sd3.5-large',
+            mode='image-to-image',
+            error_type=type(e).__name__,
+            strength=params.strength,
+        ).error(f'SD3.5 image-to-image transformation failed: {str(e)}')
         raise
