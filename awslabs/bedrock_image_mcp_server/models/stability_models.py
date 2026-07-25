@@ -41,6 +41,7 @@ class StylePreset(str, Enum):
         PIXEL_ART: Pixel art style.
         TILE_TEXTURE: Seamless tile texture style.
     """
+
     MODEL_3D = '3d-model'
     ANALOG_FILM = 'analog-film'
     ANIME = 'anime'
@@ -76,6 +77,7 @@ class CreativeUpscaleParams(BaseModel):
         style_preset: Optional style preset to apply during upscaling.
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     prompt: str = Field(..., min_length=1, max_length=10000)
     creativity: float = Field(default=0.3, ge=0.1, le=0.5)
@@ -99,6 +101,7 @@ class ConservativeUpscaleParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     prompt: str = Field(..., min_length=1, max_length=10000)
     negative_prompt: Optional[str] = Field(None, max_length=10000)
@@ -116,6 +119,7 @@ class FastUpscaleParams(BaseModel):
         image: Base64-encoded input image or file path.
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     output_format: OutputFormat = OutputFormat.PNG
 
@@ -136,6 +140,7 @@ class InpaintParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     mask: str
     prompt: str = Field(..., min_length=1, max_length=10000)
@@ -163,6 +168,7 @@ class OutpaintParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     prompt: str = Field(..., min_length=1, max_length=10000)
     left: int = Field(default=0, ge=0, le=2000)
@@ -189,6 +195,7 @@ class SearchReplaceParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     search_prompt: str = Field(..., min_length=1, max_length=10000)
     prompt: str = Field(..., min_length=1, max_length=10000)
@@ -213,6 +220,7 @@ class SearchRecolorParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     select_prompt: str = Field(..., min_length=1, max_length=10000)
     prompt: str = Field(..., min_length=1, max_length=10000)
@@ -234,6 +242,7 @@ class RemoveObjectParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     image: str
     mask: str
     grow_mask: int = Field(default=5, ge=0, le=20)
@@ -250,6 +259,7 @@ class BackgroundRemovalParams(BaseModel):
     Attributes:
         image: Base64-encoded input image or file path.
     """
+
     image: str
 
 
@@ -269,6 +279,7 @@ class SketchToImageParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     control_image: str = Field(..., alias='image')
     prompt: str = Field(..., min_length=1, max_length=10000)
     control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
@@ -296,6 +307,7 @@ class StructureControlParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output format (jpeg, png, webp).
     """
+
     control_image: str = Field(..., alias='image')
     prompt: str = Field(..., min_length=1, max_length=10000)
     control_strength: float = Field(default=0.7, ge=0.0, le=1.0)
@@ -324,6 +336,7 @@ class StyleGuideParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     reference_image: str = Field(..., alias='image')
     prompt: str = Field(..., min_length=1, max_length=10000)
     fidelity: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -352,6 +365,7 @@ class StyleTransferParams(BaseModel):
         seed: Random seed for reproducibility (0-4,294,967,294).
         output_format: Output image format (jpeg, png, webp).
     """
+
     init_image: str
     style_image: str
     prompt: str = Field(..., min_length=1, max_length=10000)

@@ -92,7 +92,7 @@ async def inpaint(
     params: InpaintParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Fill masked regions with AI-generated content.
 
@@ -144,9 +144,7 @@ async def inpaint(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
@@ -169,9 +167,7 @@ async def inpaint(
 
     # Invoke Bedrock model
     result = await invoke_bedrock_model(
-        model_id=STABLE_INPAINT_MODEL_ID,
-        request_body=request_body,
-        bedrock_client=bedrock_client
+        model_id=STABLE_INPAINT_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
     )
 
     # Extract images from response
@@ -184,7 +180,7 @@ async def inpaint(
             paths=[],
             model_id=STABLE_INPAINT_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -193,7 +189,7 @@ async def inpaint(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Inpaint completed: {len(saved_paths)} image(s) saved')
@@ -205,19 +201,15 @@ async def inpaint(
         model_id=STABLE_INPAINT_MODEL_ID,
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'grow_mask': params.grow_mask,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'grow_mask': params.grow_mask, 'dimensions': f'{width}x{height}'},
     )
-
 
 
 async def outpaint(
     params: OutpaintParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Extend images beyond their original boundaries.
 
@@ -256,14 +248,14 @@ async def outpaint(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
-    logger.info(f'Outpaint directions: left={params.left}, right={params.right}, '
-                f'up={params.up}, down={params.down}')
+    logger.info(
+        f'Outpaint directions: left={params.left}, right={params.right}, '
+        f'up={params.up}, down={params.down}'
+    )
 
     # Build request body
     request_body: Dict[str, Any] = {
@@ -286,9 +278,7 @@ async def outpaint(
 
     # Invoke Bedrock model
     result = await invoke_bedrock_model(
-        model_id=STABLE_OUTPAINT_MODEL_ID,
-        request_body=request_body,
-        bedrock_client=bedrock_client
+        model_id=STABLE_OUTPAINT_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
     )
 
     # Extract images from response
@@ -301,7 +291,7 @@ async def outpaint(
             paths=[],
             model_id=STABLE_OUTPAINT_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -310,7 +300,7 @@ async def outpaint(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Outpaint completed: {len(saved_paths)} image(s) saved')
@@ -325,8 +315,8 @@ async def outpaint(
         metadata={
             'creativity': params.creativity,
             'input_dimensions': f'{width}x{height}',
-            'expansion': f'left={params.left}, right={params.right}, up={params.up}, down={params.down}'
-        }
+            'expansion': f'left={params.left}, right={params.right}, up={params.up}, down={params.down}',
+        },
     )
 
 
@@ -334,7 +324,7 @@ async def search_and_replace(
     params: SearchReplaceParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Find and replace objects using text prompts.
 
@@ -373,9 +363,7 @@ async def search_and_replace(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
@@ -401,7 +389,7 @@ async def search_and_replace(
     result = await invoke_bedrock_model(
         model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -414,7 +402,7 @@ async def search_and_replace(
             paths=[],
             model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -423,7 +411,7 @@ async def search_and_replace(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Search and replace completed: {len(saved_paths)} image(s) saved')
@@ -435,10 +423,7 @@ async def search_and_replace(
         model_id=STABLE_SEARCH_REPLACE_MODEL_ID,
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'search_prompt': params.search_prompt,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'search_prompt': params.search_prompt, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -446,7 +431,7 @@ async def search_and_recolor(
     params: SearchRecolorParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Recolor objects using text prompts.
 
@@ -487,9 +472,7 @@ async def search_and_recolor(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
@@ -515,7 +498,7 @@ async def search_and_recolor(
     result = await invoke_bedrock_model(
         model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -528,7 +511,7 @@ async def search_and_recolor(
             paths=[],
             model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -537,7 +520,7 @@ async def search_and_recolor(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Search and recolor completed: {len(saved_paths)} image(s) saved')
@@ -549,10 +532,7 @@ async def search_and_recolor(
         model_id=STABLE_SEARCH_RECOLOR_MODEL_ID,
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'select_prompt': params.select_prompt,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'select_prompt': params.select_prompt, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -560,7 +540,7 @@ async def remove_object(
     params: RemoveObjectParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Remove unwanted objects from images.
 
@@ -611,9 +591,7 @@ async def remove_object(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
@@ -633,7 +611,7 @@ async def remove_object(
     result = await invoke_bedrock_model(
         model_id=STABLE_ERASE_OBJECT_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -645,7 +623,7 @@ async def remove_object(
             message='No images generated',
             paths=[],
             model_id=STABLE_ERASE_OBJECT_MODEL_ID,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -654,7 +632,7 @@ async def remove_object(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Remove object completed: {len(saved_paths)} image(s) saved')
@@ -665,10 +643,7 @@ async def remove_object(
         paths=saved_paths,
         model_id=STABLE_ERASE_OBJECT_MODEL_ID,
         seed=params.seed,
-        metadata={
-            'grow_mask': params.grow_mask,
-            'dimensions': f'{width}x{height}'
-        }
+        metadata={'grow_mask': params.grow_mask, 'dimensions': f'{width}x{height}'},
     )
 
 
@@ -676,7 +651,7 @@ async def remove_background(
     params: BackgroundRemovalParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Remove background from image.
 
@@ -715,9 +690,7 @@ async def remove_background(
     # Validate image dimensions
     image_bytes = decode_base64_image(image_base64)
     width, height = validate_image_dimensions(
-        image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Input image dimensions: {width}x{height}')
@@ -734,7 +707,7 @@ async def remove_background(
     result = await invoke_bedrock_model(
         model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -745,7 +718,7 @@ async def remove_background(
             status='error',
             message='No images generated',
             paths=[],
-            model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID
+            model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID,
         )
 
     # Save images (always PNG for transparency)
@@ -754,7 +727,7 @@ async def remove_background(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=OutputFormat.PNG
+        output_format=OutputFormat.PNG,
     )
 
     logger.info(f'Background removal completed: {len(saved_paths)} image(s) saved')
@@ -764,8 +737,5 @@ async def remove_background(
         message='Successfully removed background from image',
         paths=saved_paths,
         model_id=STABLE_REMOVE_BACKGROUND_MODEL_ID,
-        metadata={
-            'input_dimensions': f'{width}x{height}',
-            'output_format': 'png'
-        }
+        metadata={'input_dimensions': f'{width}x{height}', 'output_format': 'png'},
     )

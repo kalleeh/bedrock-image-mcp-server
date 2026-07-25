@@ -99,8 +99,8 @@ async def generate_image_with_text(
             'cfg_scale': cfg_scale,
             'num_images': number_of_images,
             'prompt_length': len(prompt),
-            'has_negative_prompt': negative_prompt is not None
-        }
+            'has_negative_prompt': negative_prompt is not None,
+        },
     )
 
     try:
@@ -121,7 +121,9 @@ async def generate_image_with_text(
             # Create text-to-image params
             style_enum = ImageStyle(style) if style else None
             if negative_prompt is not None:
-                text_params = TextToImageParams(text=prompt, negativeText=negative_prompt, style=style_enum)
+                text_params = TextToImageParams(
+                    text=prompt, negativeText=negative_prompt, style=style_enum
+                )
             else:
                 text_params = TextToImageParams(text=prompt, style=style_enum)
 
@@ -151,14 +153,14 @@ async def generate_image_with_text(
             model_response = await invoke_bedrock_model(
                 model_id=NOVA_CANVAS_MODEL_ID,
                 request_body=request_model_dict,
-                bedrock_client=bedrock_runtime_client
+                bedrock_client=bedrock_runtime_client,
             )
 
             # Extract the image data
             base64_images = model_response['images']
             logger.info(
                 f'Received {len(base64_images)} images from Nova Canvas API',
-                extra={'images_count': len(base64_images), 'model': 'nova-canvas'}
+                extra={'images_count': len(base64_images), 'model': 'nova-canvas'},
             )
 
             # Save the generated images using common function
@@ -166,7 +168,7 @@ async def generate_image_with_text(
                 base64_images=base64_images,
                 workspace_dir=workspace_dir,
                 filename_prefix='nova_canvas',
-                output_format=OutputFormat.PNG
+                output_format=OutputFormat.PNG,
             )
 
             logger.info(
@@ -174,8 +176,8 @@ async def generate_image_with_text(
                 extra={
                     'images_count': len(saved_paths),
                     'model': 'nova-canvas',
-                    'output_dir': workspace_dir or 'current_directory'
-                }
+                    'output_dir': workspace_dir or 'current_directory',
+                },
             )
             return ImageGenerationResponse(
                 status='success',
@@ -190,8 +192,8 @@ async def generate_image_with_text(
                 extra={
                     'model': 'nova-canvas',
                     'error_type': type(e).__name__,
-                    'prompt_length': len(prompt)
-                }
+                    'prompt_length': len(prompt),
+                },
             )
             return ImageGenerationResponse(
                 status='error',
@@ -308,7 +310,7 @@ async def generate_image_with_colors(
             model_response = await invoke_bedrock_model(
                 model_id=NOVA_CANVAS_MODEL_ID,
                 request_body=request_model_dict,
-                bedrock_client=bedrock_runtime_client
+                bedrock_client=bedrock_runtime_client,
             )
 
             # Extract the image data
@@ -320,7 +322,7 @@ async def generate_image_with_colors(
                 base64_images=base64_images,
                 workspace_dir=workspace_dir,
                 filename_prefix='nova_canvas_color',
-                output_format=OutputFormat.PNG
+                output_format=OutputFormat.PNG,
             )
 
             logger.info(f'Successfully generated {len(saved_paths)} color-guided image(s)')

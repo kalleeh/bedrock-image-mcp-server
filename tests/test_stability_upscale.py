@@ -60,7 +60,9 @@ class TestUpscaleCreative:
             return_value={
                 'body': MagicMock(
                     read=MagicMock(
-                        return_value=b'{"images": ["' + base64_image.encode() + b'"], "finish_reasons": ["SUCCESS"]}'
+                        return_value=b'{"images": ["'
+                        + base64_image.encode()
+                        + b'"], "finish_reasons": ["SUCCESS"]}'
                     )
                 )
             }
@@ -69,55 +71,55 @@ class TestUpscaleCreative:
         # Create parameters
         params = CreativeUpscaleParams(
             image=base64_image,
-            prompt="high quality upscaled image",
+            prompt='high quality upscaled image',
             creativity=0.3,
-            output_format=OutputFormat.PNG
+            output_format=OutputFormat.PNG,
         )
 
         # Call upscale function
-        with patch('awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model') as mock_invoke:
-            mock_invoke.return_value = {
-                'images': [base64_image],
-                'finish_reasons': ['SUCCESS']
-            }
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
+        ) as mock_invoke:
+            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
 
             response = await upscale_creative(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
                 workspace_dir=temp_workspace_dir,
-                filename='test_upscale'
+                filename='test_upscale',
             )
 
         # Verify response
         assert response.status == 'success'
         assert len(response.paths) == 1
         assert response.model_id == STABLE_UPSCALE_CREATIVE_MODEL_ID
-        assert response.prompt == "high quality upscaled image"
+        assert response.prompt == 'high quality upscaled image'
         assert response.metadata['creativity'] == 0.3
 
     @pytest.mark.asyncio
-    async def test_upscale_with_style_preset(self, mock_bedrock_runtime_client, temp_workspace_dir):
+    async def test_upscale_with_style_preset(
+        self, mock_bedrock_runtime_client, temp_workspace_dir
+    ):
         """Test creative upscale with style preset."""
         base64_image = create_test_image_base64()
 
         params = CreativeUpscaleParams(
             image=base64_image,
-            prompt="photographic style",
+            prompt='photographic style',
             creativity=0.4,
             style_preset=StylePreset.PHOTOGRAPHIC,
-            output_format=OutputFormat.PNG
+            output_format=OutputFormat.PNG,
         )
 
-        with patch('awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model') as mock_invoke:
-            mock_invoke.return_value = {
-                'images': [base64_image],
-                'finish_reasons': ['SUCCESS']
-            }
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
+        ) as mock_invoke:
+            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
 
             response = await upscale_creative(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
-                workspace_dir=temp_workspace_dir
+                workspace_dir=temp_workspace_dir,
             )
 
         assert response.status == 'success'
@@ -133,28 +135,25 @@ class TestUpscaleConservative:
         base64_image = create_test_image_base64()
 
         params = ConservativeUpscaleParams(
-            image=base64_image,
-            prompt="preserve original details",
-            output_format=OutputFormat.PNG
+            image=base64_image, prompt='preserve original details', output_format=OutputFormat.PNG
         )
 
-        with patch('awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model') as mock_invoke:
-            mock_invoke.return_value = {
-                'images': [base64_image],
-                'finish_reasons': ['SUCCESS']
-            }
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
+        ) as mock_invoke:
+            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
 
             response = await upscale_conservative(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
                 workspace_dir=temp_workspace_dir,
-                filename='test_conservative'
+                filename='test_conservative',
             )
 
         assert response.status == 'success'
         assert len(response.paths) == 1
         assert response.model_id == STABLE_UPSCALE_CONSERVATIVE_MODEL_ID
-        assert response.prompt == "preserve original details"
+        assert response.prompt == 'preserve original details'
 
 
 class TestUpscaleFast:
@@ -166,22 +165,18 @@ class TestUpscaleFast:
         # Create larger image to meet minimum pixel requirement
         base64_image = create_test_image_base64(width=512, height=512)
 
-        params = FastUpscaleParams(
-            image=base64_image,
-            output_format=OutputFormat.PNG
-        )
+        params = FastUpscaleParams(image=base64_image, output_format=OutputFormat.PNG)
 
-        with patch('awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model') as mock_invoke:
-            mock_invoke.return_value = {
-                'images': [base64_image],
-                'finish_reasons': ['SUCCESS']
-            }
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
+        ) as mock_invoke:
+            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
 
             response = await upscale_fast(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
                 workspace_dir=temp_workspace_dir,
-                filename='test_fast'
+                filename='test_fast',
             )
 
         assert response.status == 'success'
@@ -195,16 +190,13 @@ class TestUpscaleFast:
         # Create small image below minimum
         base64_image = create_test_image_base64(width=16, height=16)
 
-        params = FastUpscaleParams(
-            image=base64_image,
-            output_format=OutputFormat.PNG
-        )
+        params = FastUpscaleParams(image=base64_image, output_format=OutputFormat.PNG)
 
         with pytest.raises(ValueError, match='below minimum'):
             await upscale_fast(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
-                workspace_dir=temp_workspace_dir
+                workspace_dir=temp_workspace_dir,
             )
 
 
@@ -212,28 +204,29 @@ class TestImageValidation:
     """Tests for image dimension validation in upscale services."""
 
     @pytest.mark.asyncio
-    async def test_creative_upscale_warns_large_image(self, mock_bedrock_runtime_client, temp_workspace_dir, caplog):
+    async def test_creative_upscale_warns_large_image(
+        self, mock_bedrock_runtime_client, temp_workspace_dir, caplog
+    ):
         """Test that creative upscale warns when image is too large."""
         # Create image larger than recommended (but still valid for testing)
         base64_image = create_test_image_base64(width=1024, height=1024)
 
         params = CreativeUpscaleParams(
             image=base64_image,
-            prompt="test prompt",
+            prompt='test prompt',
             creativity=0.3,
-            output_format=OutputFormat.PNG
+            output_format=OutputFormat.PNG,
         )
 
-        with patch('awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model') as mock_invoke:
-            mock_invoke.return_value = {
-                'images': [base64_image],
-                'finish_reasons': ['SUCCESS']
-            }
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
+        ) as mock_invoke:
+            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
 
             response = await upscale_creative(
                 params=params,
                 bedrock_client=mock_bedrock_runtime_client,
-                workspace_dir=temp_workspace_dir
+                workspace_dir=temp_workspace_dir,
             )
 
         # Should still succeed but may have logged a warning

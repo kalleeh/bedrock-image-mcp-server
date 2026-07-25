@@ -55,7 +55,7 @@ async def sketch_to_image(
     params: SketchToImageParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Convert sketch to detailed image.
 
@@ -94,9 +94,7 @@ async def sketch_to_image(
     # Validate control image dimensions
     control_image_bytes = decode_base64_image(control_image_base64)
     width, height = validate_image_dimensions(
-        control_image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        control_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Control image dimensions: {width}x{height}')
@@ -122,7 +120,7 @@ async def sketch_to_image(
     result = await invoke_bedrock_model(
         model_id=STABLE_CONTROL_SKETCH_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -135,7 +133,7 @@ async def sketch_to_image(
             paths=[],
             model_id=STABLE_CONTROL_SKETCH_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -144,7 +142,7 @@ async def sketch_to_image(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Sketch-to-image completed: {len(saved_paths)} image(s) saved')
@@ -158,8 +156,8 @@ async def sketch_to_image(
         seed=params.seed,
         metadata={
             'control_strength': params.control_strength,
-            'control_dimensions': f'{width}x{height}'
-        }
+            'control_dimensions': f'{width}x{height}',
+        },
     )
 
 
@@ -167,7 +165,7 @@ async def structure_control(
     params: StructureControlParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Generate image following structural guide.
 
@@ -206,9 +204,7 @@ async def structure_control(
     # Validate control image dimensions
     control_image_bytes = decode_base64_image(control_image_base64)
     width, height = validate_image_dimensions(
-        control_image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        control_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Control image dimensions: {width}x{height}')
@@ -234,7 +230,7 @@ async def structure_control(
     result = await invoke_bedrock_model(
         model_id=STABLE_CONTROL_STRUCTURE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -247,7 +243,7 @@ async def structure_control(
             paths=[],
             model_id=STABLE_CONTROL_STRUCTURE_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -256,7 +252,7 @@ async def structure_control(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Structure control completed: {len(saved_paths)} image(s) saved')
@@ -270,8 +266,8 @@ async def structure_control(
         seed=params.seed,
         metadata={
             'control_strength': params.control_strength,
-            'control_dimensions': f'{width}x{height}'
-        }
+            'control_dimensions': f'{width}x{height}',
+        },
     )
 
 
@@ -279,7 +275,7 @@ async def style_guide(
     params: StyleGuideParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Generate image matching reference style.
 
@@ -319,9 +315,7 @@ async def style_guide(
     # Validate reference image dimensions
     reference_image_bytes = decode_base64_image(reference_image_base64)
     width, height = validate_image_dimensions(
-        reference_image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        reference_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Reference image dimensions: {width}x{height}')
@@ -347,7 +341,7 @@ async def style_guide(
     result = await invoke_bedrock_model(
         model_id=STABLE_STYLE_GUIDE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -360,7 +354,7 @@ async def style_guide(
             paths=[],
             model_id=STABLE_STYLE_GUIDE_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -369,7 +363,7 @@ async def style_guide(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Style guide completed: {len(saved_paths)} image(s) saved')
@@ -381,10 +375,7 @@ async def style_guide(
         model_id=STABLE_STYLE_GUIDE_MODEL_ID,
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'fidelity': params.fidelity,
-            'reference_dimensions': f'{width}x{height}'
-        }
+        metadata={'fidelity': params.fidelity, 'reference_dimensions': f'{width}x{height}'},
     )
 
 
@@ -392,7 +383,7 @@ async def style_transfer(
     params: StyleTransferParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Apply style from one image to content of another.
 
@@ -439,24 +430,22 @@ async def style_transfer(
     # Validate init image dimensions
     init_image_bytes = decode_base64_image(init_image_base64)
     init_width, init_height = validate_image_dimensions(
-        init_image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        init_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     # Validate style image dimensions
     style_image_bytes = decode_base64_image(style_image_base64)
     style_width, style_height = validate_image_dimensions(
-        style_image_bytes,
-        min_width=MIN_IMAGE_DIMENSION,
-        min_height=MIN_IMAGE_DIMENSION
+        style_image_bytes, min_width=MIN_IMAGE_DIMENSION, min_height=MIN_IMAGE_DIMENSION
     )
 
     logger.info(f'Init image dimensions: {init_width}x{init_height}')
     logger.info(f'Style image dimensions: {style_width}x{style_height}')
-    logger.info(f'Composition fidelity: {params.composition_fidelity}, '
-                f'Style strength: {params.style_strength}, '
-                f'Change strength: {params.change_strength}')
+    logger.info(
+        f'Composition fidelity: {params.composition_fidelity}, '
+        f'Style strength: {params.style_strength}, '
+        f'Change strength: {params.change_strength}'
+    )
 
     # Build request body
     request_body: Dict[str, Any] = {
@@ -480,7 +469,7 @@ async def style_transfer(
     result = await invoke_bedrock_model(
         model_id=STABLE_STYLE_TRANSFER_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -493,7 +482,7 @@ async def style_transfer(
             paths=[],
             model_id=STABLE_STYLE_TRANSFER_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -502,7 +491,7 @@ async def style_transfer(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Style transfer completed: {len(saved_paths)} image(s) saved')
@@ -519,6 +508,6 @@ async def style_transfer(
             'style_strength': params.style_strength,
             'change_strength': params.change_strength,
             'init_dimensions': f'{init_width}x{init_height}',
-            'style_dimensions': f'{style_width}x{style_height}'
-        }
+            'style_dimensions': f'{style_width}x{style_height}',
+        },
     )

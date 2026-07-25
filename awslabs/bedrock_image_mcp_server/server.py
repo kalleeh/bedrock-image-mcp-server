@@ -123,11 +123,11 @@ aws_region: str = os.environ.get('AWS_REGION', 'us-east-1')
 retry_config = Config(
     retries={
         'max_attempts': BEDROCK_MAX_RETRY_ATTEMPTS,
-        'mode': BEDROCK_RETRY_MODE  # 'adaptive' mode handles exponential backoff with jitter
+        'mode': BEDROCK_RETRY_MODE,  # 'adaptive' mode handles exponential backoff with jitter
     },
     connect_timeout=BEDROCK_CONNECT_TIMEOUT,
     read_timeout=BEDROCK_READ_TIMEOUT,
-    max_pool_connections=BEDROCK_MAX_POOL_CONNECTIONS
+    max_pool_connections=BEDROCK_MAX_POOL_CONNECTIONS,
 )
 
 try:
@@ -137,21 +137,17 @@ try:
         ).client('bedrock-runtime', config=retry_config)
         logger.info(
             f'Bedrock client initialized with AWS profile: {aws_profile}',
-            extra={'region': aws_region, 'profile': aws_profile}
+            extra={'region': aws_region, 'profile': aws_profile},
         )
     else:
         bedrock_runtime_client = boto3.Session(region_name=aws_region).client(
             'bedrock-runtime', config=retry_config
         )
         logger.info(
-            'Bedrock client initialized with default credentials',
-            extra={'region': aws_region}
+            'Bedrock client initialized with default credentials', extra={'region': aws_region}
         )
 except Exception as e:
-    logger.error(
-        f'Error creating bedrock runtime client: {str(e)}',
-        extra={'region': aws_region}
-    )
+    logger.error(f'Error creating bedrock runtime client: {str(e)}', extra={'region': aws_region})
     raise
 
 
@@ -533,14 +529,18 @@ async def mcp_generate_image_sd35(
         try:
             aspect_ratio_enum = AspectRatio(aspect_ratio)
         except ValueError:
-            await ctx.error(f'Invalid aspect ratio: {aspect_ratio}. Must be one of: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21')
+            await ctx.error(
+                f'Invalid aspect ratio: {aspect_ratio}. Must be one of: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21'
+            )
             raise ValueError(f'Invalid aspect ratio: {aspect_ratio}')
 
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -552,9 +552,7 @@ async def mcp_generate_image_sd35(
             output_format=output_format_enum,
         )
 
-        logger.info(
-            f'Generating SD3.5 image with aspect ratio: {aspect_ratio}, seed: {seed}'
-        )
+        logger.info(f'Generating SD3.5 image with aspect ratio: {aspect_ratio}, seed: {seed}')
 
         response = await generate_text_to_image(
             params=params,
@@ -584,9 +582,7 @@ async def mcp_transform_image_sd35(
     prompt: str = Field(
         description='The text description guiding the image transformation (1-10,000 characters)'
     ),
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     strength: float = Field(
         default=0.7,
         description='Transformation intensity: 0.0 (preserve input) to 1.0 (ignore input). Start with 0.7 for balanced results.',
@@ -685,7 +681,9 @@ async def mcp_transform_image_sd35(
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -698,9 +696,7 @@ async def mcp_transform_image_sd35(
             output_format=output_format_enum,
         )
 
-        logger.info(
-            f'Transforming image with SD3.5, strength: {strength}, seed: {seed}'
-        )
+        logger.info(f'Transforming image with SD3.5, strength: {strength}, seed: {seed}')
 
         response = await generate_image_to_image(
             params=params,
@@ -727,9 +723,7 @@ async def mcp_transform_image_sd35(
 @mcp.tool(name='upscale_creative')
 async def mcp_upscale_creative(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     prompt: str = Field(
         description='Descriptive prompt to guide upscaling style (1-10,000 characters)'
     ),
@@ -811,7 +805,7 @@ async def mcp_upscale_creative(
         McpImageGenerationResponse: A response containing the upscaled image paths.
     """
     logger.debug(
-        f"MCP tool upscale_creative called with creativity: {creativity}, style: {style_preset}"
+        f'MCP tool upscale_creative called with creativity: {creativity}, style: {style_preset}'
     )
 
     try:
@@ -819,7 +813,9 @@ async def mcp_upscale_creative(
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Validate and convert style preset if provided
@@ -842,9 +838,7 @@ async def mcp_upscale_creative(
             output_format=output_format_enum,
         )
 
-        logger.info(
-            f'Creative upscaling image with creativity: {creativity}, seed: {seed}'
-        )
+        logger.info(f'Creative upscaling image with creativity: {creativity}, seed: {seed}')
 
         response = await upscale_creative(
             params=params,
@@ -871,12 +865,8 @@ async def mcp_upscale_creative(
 @mcp.tool(name='upscale_conservative')
 async def mcp_upscale_conservative(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
-    prompt: str = Field(
-        description='Descriptive prompt for context (1-10,000 characters)'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
+    prompt: str = Field(description='Descriptive prompt for context (1-10,000 characters)'),
     negative_prompt: Optional[str] = Field(
         default=None,
         description='Elements to exclude from the upscaled image (1-10,000 characters)',
@@ -935,16 +925,16 @@ async def mcp_upscale_conservative(
     Returns:
         McpImageGenerationResponse: A response containing the upscaled image paths.
     """
-    logger.debug(
-        "MCP tool upscale_conservative called"
-    )
+    logger.debug('MCP tool upscale_conservative called')
 
     try:
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -956,9 +946,7 @@ async def mcp_upscale_conservative(
             output_format=output_format_enum,
         )
 
-        logger.info(
-            f'Conservative upscaling image, seed: {seed}'
-        )
+        logger.info(f'Conservative upscaling image, seed: {seed}')
 
         response = await upscale_conservative(
             params=params,
@@ -985,9 +973,7 @@ async def mcp_upscale_conservative(
 @mcp.tool(name='upscale_fast')
 async def mcp_upscale_fast(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     output_format: str = Field(
         default=DEFAULT_OUTPUT_FORMAT,
         description='Output image format: "jpeg", "png", or "webp"',
@@ -1036,16 +1022,16 @@ async def mcp_upscale_fast(
     Returns:
         McpImageGenerationResponse: A response containing the upscaled image paths.
     """
-    logger.debug(
-        "MCP tool upscale_fast called"
-    )
+    logger.debug('MCP tool upscale_fast called')
 
     try:
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1054,9 +1040,7 @@ async def mcp_upscale_fast(
             output_format=output_format_enum,
         )
 
-        logger.info(
-            'Fast upscaling image 4x'
-        )
+        logger.info('Fast upscaling image 4x')
 
         response = await upscale_fast(
             params=params,
@@ -1083,15 +1067,11 @@ async def mcp_upscale_fast(
 @mcp.tool(name='inpaint_image')
 async def mcp_inpaint(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     mask: str = Field(
         description='Path to the mask image file or base64-encoded mask data. White areas are filled, black areas are preserved.'
     ),
-    prompt: str = Field(
-        description='Description of desired fill content (1-10,000 characters)'
-    ),
+    prompt: str = Field(description='Description of desired fill content (1-10,000 characters)'),
     negative_prompt: Optional[str] = Field(
         default=None,
         description='Elements to exclude from the generated content (1-10,000 characters)',
@@ -1157,7 +1137,9 @@ async def mcp_inpaint(
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1198,9 +1180,7 @@ async def mcp_inpaint(
 @mcp.tool(name='outpaint_image')
 async def mcp_outpaint(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     prompt: str = Field(
         description='Description of desired extended content (1-10,000 characters)'
     ),
@@ -1284,7 +1264,9 @@ async def mcp_outpaint(
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1328,15 +1310,11 @@ async def mcp_outpaint(
 @mcp.tool(name='search_and_replace')
 async def mcp_search_replace(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     search_prompt: str = Field(
         description='Description of object to find and replace (1-10,000 characters)'
     ),
-    prompt: str = Field(
-        description='Description of replacement content (1-10,000 characters)'
-    ),
+    prompt: str = Field(description='Description of replacement content (1-10,000 characters)'),
     negative_prompt: Optional[str] = Field(
         default=None,
         description='Elements to exclude from the replacement (1-10,000 characters)',
@@ -1408,14 +1386,16 @@ async def mcp_search_replace(
     Returns:
         McpImageGenerationResponse: A response containing the edited image paths.
     """
-    logger.debug("MCP tool search_and_replace called")
+    logger.debug('MCP tool search_and_replace called')
 
     try:
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1455,15 +1435,11 @@ async def mcp_search_replace(
 @mcp.tool(name='search_and_recolor')
 async def mcp_search_recolor(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     select_prompt: str = Field(
         description='Description of object to recolor (1-10,000 characters)'
     ),
-    prompt: str = Field(
-        description='Description of desired color/style (1-10,000 characters)'
-    ),
+    prompt: str = Field(description='Description of desired color/style (1-10,000 characters)'),
     negative_prompt: Optional[str] = Field(
         default=None,
         description='Elements to exclude from the recoloring (1-10,000 characters)',
@@ -1536,14 +1512,16 @@ async def mcp_search_recolor(
     Returns:
         McpImageGenerationResponse: A response containing the recolored image paths.
     """
-    logger.debug("MCP tool search_and_recolor called")
+    logger.debug('MCP tool search_and_recolor called')
 
     try:
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1583,9 +1561,7 @@ async def mcp_search_recolor(
 @mcp.tool(name='remove_object')
 async def mcp_remove_object(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     mask: str = Field(
         description='Path to the mask image file or base64-encoded mask data. White areas are removed, black areas are preserved.'
     ),
@@ -1641,14 +1617,16 @@ async def mcp_remove_object(
     Returns:
         McpImageGenerationResponse: A response containing the edited image paths.
     """
-    logger.debug("MCP tool remove_object called")
+    logger.debug('MCP tool remove_object called')
 
     try:
         # Validate and convert output format
         try:
             output_format_enum = OutputFormat(output_format.lower())
         except ValueError:
-            await ctx.error(f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp')
+            await ctx.error(
+                f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+            )
             raise ValueError(f'Invalid output format: {output_format}')
 
         # Create parameters model
@@ -1687,9 +1665,7 @@ async def mcp_remove_object(
 @mcp.tool(name='remove_background')
 async def mcp_remove_background(
     ctx: Context,
-    image: str = Field(
-        description='Path to the input image file or base64-encoded image data'
-    ),
+    image: str = Field(description='Path to the input image file or base64-encoded image data'),
     filename: Optional[str] = Field(
         default=None,
         description='The name of the file to save the image to (without extension)',
@@ -1729,7 +1705,7 @@ async def mcp_remove_background(
     Returns:
         McpImageGenerationResponse: A response containing the image paths with transparent background.
     """
-    logger.debug("MCP tool remove_background called")
+    logger.debug('MCP tool remove_background called')
 
     try:
         # Create parameters model
@@ -1839,7 +1815,7 @@ async def mcp_sketch_to_image(
     Returns:
         McpImageGenerationResponse: A response containing the generated image paths.
     """
-    logger.debug("MCP tool sketch_to_image called")
+    logger.debug('MCP tool sketch_to_image called')
 
     try:
         # Create parameters model
@@ -1954,7 +1930,7 @@ async def mcp_structure_control(
     Returns:
         McpImageGenerationResponse: A response containing the generated image paths.
     """
-    logger.debug("MCP tool structure_control called")
+    logger.debug('MCP tool structure_control called')
 
     try:
         # Create parameters model
@@ -1967,7 +1943,9 @@ async def mcp_structure_control(
             output_format=OutputFormat(output_format),
         )
 
-        logger.info(f'Generating image with structure control, control_strength={control_strength}')
+        logger.info(
+            f'Generating image with structure control, control_strength={control_strength}'
+        )
 
         response = await structure_control(
             params=params,
@@ -1997,9 +1975,7 @@ async def mcp_style_guide(
     reference_image: str = Field(
         description='Path to the reference image for style guidance or base64-encoded image data'
     ),
-    prompt: str = Field(
-        description='Description of desired content (1-10,000 characters)'
-    ),
+    prompt: str = Field(description='Description of desired content (1-10,000 characters)'),
     fidelity: float = Field(
         default=DEFAULT_STYLE_FIDELITY,
         description='How closely to match the reference style (0.0-1.0). Higher values mean closer style match.',
@@ -2070,7 +2046,7 @@ async def mcp_style_guide(
     Returns:
         McpImageGenerationResponse: A response containing the generated image paths.
     """
-    logger.debug("MCP tool style_guide called")
+    logger.debug('MCP tool style_guide called')
 
     try:
         # Create parameters model
@@ -2116,9 +2092,7 @@ async def mcp_style_transfer(
     style_image: str = Field(
         description='Path to the style reference image file or base64-encoded image data'
     ),
-    prompt: str = Field(
-        description='Description to guide the transfer (1-10,000 characters)'
-    ),
+    prompt: str = Field(description='Description to guide the transfer (1-10,000 characters)'),
     composition_fidelity: float = Field(
         default=DEFAULT_COMPOSITION_FIDELITY,
         description='How closely to preserve init_image composition (0.0-1.0). Higher values preserve more of the original composition.',
@@ -2204,7 +2178,7 @@ async def mcp_style_transfer(
     Returns:
         McpImageGenerationResponse: A response containing the generated image paths.
     """
-    logger.debug("MCP tool style_transfer called")
+    logger.debug('MCP tool style_transfer called')
 
     try:
         # Create parameters model
@@ -2220,8 +2194,10 @@ async def mcp_style_transfer(
             output_format=OutputFormat(output_format),
         )
 
-        logger.info(f'Transferring style with composition_fidelity={composition_fidelity}, '
-                    f'style_strength={style_strength}, change_strength={change_strength}')
+        logger.info(
+            f'Transferring style with composition_fidelity={composition_fidelity}, '
+            f'style_strength={style_strength}, change_strength={change_strength}'
+        )
 
         response = await style_transfer(
             params=params,
@@ -2328,7 +2304,7 @@ async def mcp_create_rectangular_mask(
 
         logger.info(
             f'Created rectangular mask: {mask_width}x{mask_height} at ({x},{y})',
-            extra={'path': mask_path, 'feather': feather}
+            extra={'path': mask_path, 'feather': feather},
         )
 
         return McpImageGenerationResponse(
@@ -2424,7 +2400,7 @@ async def mcp_create_ellipse_mask(
 
         logger.info(
             f'Created ellipse mask: radii {radius_x}x{radius_y} at ({center_x},{center_y})',
-            extra={'path': mask_path, 'feather': feather}
+            extra={'path': mask_path, 'feather': feather},
         )
 
         return McpImageGenerationResponse(
@@ -2492,10 +2468,7 @@ async def mcp_create_full_mask(
         with open(mask_path, 'wb') as f:
             f.write(mask_bytes)
 
-        logger.info(
-            f'Created full mask: {width}x{height}',
-            extra={'path': mask_path}
-        )
+        logger.info(f'Created full mask: {width}x{height}', extra={'path': mask_path})
 
         return McpImageGenerationResponse(
             status='success',

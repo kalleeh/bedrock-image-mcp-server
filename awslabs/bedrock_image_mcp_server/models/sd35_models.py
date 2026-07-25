@@ -40,15 +40,16 @@ class AspectRatio(str, Enum):
         RATIO_9_16: 9:16 vertical/mobile format.
         RATIO_9_21: 9:21 ultra-tall format.
     """
-    RATIO_16_9 = "16:9"
-    RATIO_1_1 = "1:1"
-    RATIO_21_9 = "21:9"
-    RATIO_2_3 = "2:3"
-    RATIO_3_2 = "3:2"
-    RATIO_4_5 = "4:5"
-    RATIO_5_4 = "5:4"
-    RATIO_9_16 = "9:16"
-    RATIO_9_21 = "9:21"
+
+    RATIO_16_9 = '16:9'
+    RATIO_1_1 = '1:1'
+    RATIO_21_9 = '21:9'
+    RATIO_2_3 = '2:3'
+    RATIO_3_2 = '3:2'
+    RATIO_4_5 = '4:5'
+    RATIO_5_4 = '5:4'
+    RATIO_9_16 = '9:16'
+    RATIO_9_21 = '9:21'
 
 
 class GenerationMode(str, Enum):
@@ -58,8 +59,9 @@ class GenerationMode(str, Enum):
         TEXT_TO_IMAGE: Generate image from text prompt only.
         IMAGE_TO_IMAGE: Transform existing image with text guidance.
     """
-    TEXT_TO_IMAGE = "text-to-image"
-    IMAGE_TO_IMAGE = "image-to-image"
+
+    TEXT_TO_IMAGE = 'text-to-image'
+    IMAGE_TO_IMAGE = 'image-to-image'
 
 
 class SD35TextToImageParams(BaseModel):
@@ -75,6 +77,7 @@ class SD35TextToImageParams(BaseModel):
         negative_prompt: Text describing what to exclude from the image.
         output_format: Output image format (jpeg, png, or webp).
     """
+
     prompt: str = Field(..., min_length=1, max_length=10000)
     aspect_ratio: AspectRatio = AspectRatio.RATIO_1_1
     seed: int = Field(default=0, ge=0, le=4294967294)
@@ -96,6 +99,7 @@ class SD35ImageToImageParams(BaseModel):
         negative_prompt: Text describing what to exclude from the image.
         output_format: Output image format (jpeg, png, or webp).
     """
+
     prompt: str = Field(..., min_length=1, max_length=10000)
     image: str  # base64 encoded
     strength: float = Field(..., ge=0.0, le=1.0)
@@ -138,13 +142,13 @@ class SD35ImageToImageParams(BaseModel):
             # Validate minimum dimensions
             if width < 64 or height < 64:
                 raise ValueError(
-                    f"Image dimensions ({width}x{height}) are below minimum requirement "
-                    f"of 64px per side for SD3.5"
+                    f'Image dimensions ({width}x{height}) are below minimum requirement '
+                    f'of 64px per side for SD3.5'
                 )
 
             return v
 
         except Exception as e:
-            if isinstance(e, ValueError) and "dimensions" in str(e):
+            if isinstance(e, ValueError) and 'dimensions' in str(e):
                 raise
-            raise ValueError(f"Invalid image data: {str(e)}")
+            raise ValueError(f'Invalid image data: {str(e)}')

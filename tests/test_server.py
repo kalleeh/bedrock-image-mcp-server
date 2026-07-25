@@ -308,10 +308,16 @@ class TestServerIntegration:
         tools = [
             # Nova Canvas (2)
             (mcp_generate_image, 'Generate an image using Amazon Nova Canvas with text prompt'),
-            (mcp_generate_image_with_colors, 'Generate an image using Amazon Nova Canvas with color guidance'),
+            (
+                mcp_generate_image_with_colors,
+                'Generate an image using Amazon Nova Canvas with color guidance',
+            ),
             # SD3.5 (2)
             (mcp_generate_image_sd35, 'Generate an image using Stable Diffusion 3.5 Large'),
-            (mcp_transform_image_sd35, 'Transform an existing image using Stable Diffusion 3.5 Large'),
+            (
+                mcp_transform_image_sd35,
+                'Transform an existing image using Stable Diffusion 3.5 Large',
+            ),
             # Upscale (3)
             (mcp_upscale_creative, 'Upscale images to 4K with creative AI enhancement'),
             (mcp_upscale_conservative, 'Upscale images to 4K while preserving original details'),
@@ -331,22 +337,26 @@ class TestServerIntegration:
         ]
 
         # Verify all 17 tools are registered with correct docstrings
-        assert len(tools) == 17, f"Expected 17 tools, found {len(tools)}"
+        assert len(tools) == 17, f'Expected 17 tools, found {len(tools)}'
 
         for tool_func, expected_doc_content in tools:
             # Check that the tool is registered
-            assert hasattr(tool_func, '__name__'), f"Tool {tool_func} missing __name__ attribute"
+            assert hasattr(tool_func, '__name__'), f'Tool {tool_func} missing __name__ attribute'
 
             # Check that the function has the correct docstring
-            assert tool_func.__doc__ is not None, f"Tool {tool_func.__name__} missing docstring"
-            assert expected_doc_content in tool_func.__doc__, \
+            assert tool_func.__doc__ is not None, f'Tool {tool_func.__name__} missing docstring'
+            assert expected_doc_content in tool_func.__doc__, (
                 f"Tool {tool_func.__name__} docstring doesn't contain expected content: {expected_doc_content}"
+            )
 
         # Verify workspace_dir parameter exists in all tools
         import inspect
+
         for tool_func, _ in tools:
             sig = inspect.signature(tool_func)
-            assert 'workspace_dir' in sig.parameters, \
-                f"Tool {tool_func.__name__} missing workspace_dir parameter"
-            assert 'ctx' in sig.parameters, \
-                f"Tool {tool_func.__name__} missing ctx parameter for error reporting"
+            assert 'workspace_dir' in sig.parameters, (
+                f'Tool {tool_func.__name__} missing workspace_dir parameter'
+            )
+            assert 'ctx' in sig.parameters, (
+                f'Tool {tool_func.__name__} missing ctx parameter for error reporting'
+            )

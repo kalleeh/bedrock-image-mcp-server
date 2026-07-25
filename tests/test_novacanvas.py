@@ -457,7 +457,9 @@ class TestGenerateImageWithColors:
         request_body = call_args['request_body']
         assert request_body['colorGuidedGenerationParams']['text'] == sample_text_prompt
         assert request_body['colorGuidedGenerationParams']['colors'] == sample_colors
-        assert request_body['colorGuidedGenerationParams']['negativeText'] == sample_negative_prompt
+        assert (
+            request_body['colorGuidedGenerationParams']['negativeText'] == sample_negative_prompt
+        )
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.novacanvas.invoke_nova_canvas')

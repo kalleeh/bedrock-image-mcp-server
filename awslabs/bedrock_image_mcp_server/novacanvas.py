@@ -61,7 +61,7 @@ def save_generated_images(
         base64_images=base64_images,
         workspace_dir=workspace_dir,
         filename_prefix=prefix,
-        output_format=OutputFormat.PNG
+        output_format=OutputFormat.PNG,
     )
     return {'paths': paths}
 
@@ -83,10 +83,11 @@ async def invoke_nova_canvas(request_model_dict, bedrock_runtime_client):
         Exception: If the API call fails.
     """
     from awslabs.bedrock_image_mcp_server.consts import NOVA_CANVAS_MODEL_ID
+
     return await invoke_bedrock_model(
         model_id=NOVA_CANVAS_MODEL_ID,
         request_body=request_model_dict,
-        bedrock_client=bedrock_runtime_client
+        bedrock_client=bedrock_runtime_client,
     )
 
 

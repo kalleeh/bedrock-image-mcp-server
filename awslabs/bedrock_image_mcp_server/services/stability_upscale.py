@@ -57,7 +57,7 @@ async def upscale_creative(
     params: CreativeUpscaleParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Upscale image to 4K with creative enhancement.
 
@@ -101,7 +101,7 @@ async def upscale_creative(
         image_bytes,
         min_width=MIN_IMAGE_DIMENSION,
         min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_CREATIVE_UPSCALE_INPUT_PIXELS
+        max_pixels=MAX_CREATIVE_UPSCALE_INPUT_PIXELS,
     )
 
     total_pixels = width * height
@@ -136,7 +136,7 @@ async def upscale_creative(
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_CREATIVE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -149,7 +149,7 @@ async def upscale_creative(
             paths=[],
             model_id=STABLE_UPSCALE_CREATIVE_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -158,7 +158,7 @@ async def upscale_creative(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Creative upscale completed: {len(saved_paths)} image(s) saved')
@@ -173,8 +173,8 @@ async def upscale_creative(
         metadata={
             'creativity': params.creativity,
             'input_dimensions': f'{width}x{height}',
-            'style_preset': params.style_preset.value if params.style_preset else None
-        }
+            'style_preset': params.style_preset.value if params.style_preset else None,
+        },
     )
 
 
@@ -182,7 +182,7 @@ async def upscale_conservative(
     params: ConservativeUpscaleParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Upscale image to 4K preserving details.
 
@@ -225,7 +225,7 @@ async def upscale_conservative(
         image_bytes,
         min_width=MIN_IMAGE_DIMENSION,
         min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS
+        max_pixels=MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS,
     )
 
     total_pixels = width * height
@@ -249,7 +249,7 @@ async def upscale_conservative(
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -262,7 +262,7 @@ async def upscale_conservative(
             paths=[],
             model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
             prompt=params.prompt,
-            seed=params.seed
+            seed=params.seed,
         )
 
     # Save images
@@ -271,7 +271,7 @@ async def upscale_conservative(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Conservative upscale completed: {len(saved_paths)} image(s) saved')
@@ -283,9 +283,7 @@ async def upscale_conservative(
         model_id=STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
         prompt=params.prompt,
         seed=params.seed,
-        metadata={
-            'input_dimensions': f'{width}x{height}'
-        }
+        metadata={'input_dimensions': f'{width}x{height}'},
     )
 
 
@@ -293,7 +291,7 @@ async def upscale_fast(
     params: FastUpscaleParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Fast 4x upscaling without creative enhancement.
 
@@ -335,7 +333,7 @@ async def upscale_fast(
         image_bytes,
         min_width=MIN_IMAGE_DIMENSION,
         min_height=MIN_IMAGE_DIMENSION,
-        max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS
+        max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS,
     )
 
     total_pixels = width * height
@@ -360,7 +358,7 @@ async def upscale_fast(
     result = await invoke_bedrock_model(
         model_id=STABLE_UPSCALE_FAST_MODEL_ID,
         request_body=request_body,
-        bedrock_client=bedrock_client
+        bedrock_client=bedrock_client,
     )
 
     # Extract images from response
@@ -371,7 +369,7 @@ async def upscale_fast(
             status='error',
             message='No images generated',
             paths=[],
-            model_id=STABLE_UPSCALE_FAST_MODEL_ID
+            model_id=STABLE_UPSCALE_FAST_MODEL_ID,
         )
 
     # Save images
@@ -380,7 +378,7 @@ async def upscale_fast(
         base64_images=images,
         workspace_dir=workspace_dir,
         filename_prefix=filename_prefix,
-        output_format=params.output_format
+        output_format=params.output_format,
     )
 
     logger.info(f'Fast upscale completed: {len(saved_paths)} image(s) saved')
@@ -390,8 +388,5 @@ async def upscale_fast(
         message='Successfully upscaled image 4x',
         paths=saved_paths,
         model_id=STABLE_UPSCALE_FAST_MODEL_ID,
-        metadata={
-            'input_dimensions': f'{width}x{height}',
-            'upscale_factor': '4x'
-        }
+        metadata={'input_dimensions': f'{width}x{height}', 'upscale_factor': '4x'},
     )

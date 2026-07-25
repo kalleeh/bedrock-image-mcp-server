@@ -42,6 +42,7 @@ class BedrockAPIError(Exception):
         message: Human-readable error message.
         retryable: Whether this error is retryable.
     """
+
     def __init__(self, message: str, error_code: str = 'Unknown', retryable: bool = False):
         """Initialize BedrockAPIError.
 
@@ -62,6 +63,7 @@ class ContentFilterError(BedrockAPIError):
     Attributes:
         reason: The reason for content filtering.
     """
+
     def __init__(self, reason: str):
         """Initialize ContentFilterError with reason.
 
@@ -70,16 +72,12 @@ class ContentFilterError(BedrockAPIError):
         """
         self.reason = reason
         super().__init__(
-            message=f"Content filtered: {reason}",
-            error_code='ContentFiltered',
-            retryable=False
+            message=f'Content filtered: {reason}', error_code='ContentFiltered', retryable=False
         )
 
 
 async def invoke_bedrock_model(
-    model_id: str,
-    request_body: Dict[str, Any],
-    bedrock_client: BedrockRuntimeClient
+    model_id: str, request_body: Dict[str, Any], bedrock_client: BedrockRuntimeClient
 ) -> Dict[str, Any]:
     """Invoke any Bedrock model with comprehensive error handling.
 
@@ -105,10 +103,7 @@ async def invoke_bedrock_model(
     # Log request with structured data for debugging
     logger.debug(
         f'Invoking Bedrock model: {model_id}',
-        extra={
-            'model_id': model_id,
-            'request_keys': list(request_body.keys())
-        }
+        extra={'model_id': model_id, 'request_keys': list(request_body.keys())},
     )
 
     try:
@@ -123,7 +118,7 @@ async def invoke_bedrock_model(
         result = json.loads(response['body'].read().decode('utf-8'))
         logger.info(
             f'Bedrock API call successful for model: {model_id}',
-            extra={'model_id': model_id, 'images_count': len(result.get('images', []))}
+            extra={'model_id': model_id, 'images_count': len(result.get('images', []))},
         )
 
         # Check for content filtering
@@ -134,7 +129,7 @@ async def invoke_bedrock_model(
                 if reason is not None:
                     logger.warning(
                         f'Content filtered: {reason}',
-                        extra={'model_id': model_id, 'filter_reason': reason}
+                        extra={'model_id': model_id, 'filter_reason': reason},
                     )
                     raise ContentFilterError(reason)
 
@@ -151,74 +146,65 @@ async def invoke_bedrock_model(
 
         logger.error(
             f'Bedrock API error: {error_code}',
-            extra={
-                'model_id': model_id,
-                'error_code': error_code,
-                'error_message': error_message
-            }
+            extra={'model_id': model_id, 'error_code': error_code, 'error_message': error_message},
         )
 
         # Classify errors following AWS best practices
         if error_code == 'ValidationException':
             raise BedrockAPIError(
-                message=f"Invalid parameters: {error_message}",
+                message=f'Invalid parameters: {error_message}',
                 error_code=error_code,
-                retryable=False
+                retryable=False,
             )
         elif error_code == 'AccessDeniedException':
             raise BedrockAPIError(
-                message=f"Access denied. Check IAM permissions for model {model_id}. "
-                        f"Ensure you have 'bedrock:InvokeModel' permission and model access is enabled.",
+                message=f'Access denied. Check IAM permissions for model {model_id}. '
+                f"Ensure you have 'bedrock:InvokeModel' permission and model access is enabled.",
                 error_code=error_code,
-                retryable=False
+                retryable=False,
             )
         elif error_code == 'ThrottlingException':
             raise BedrockAPIError(
-                message="Rate limit exceeded. AWS SDK will automatically retry with exponential backoff. "
-                        "If this persists, consider requesting a quota increase.",
+                message='Rate limit exceeded. AWS SDK will automatically retry with exponential backoff. '
+                'If this persists, consider requesting a quota increase.',
                 error_code=error_code,
-                retryable=True
+                retryable=True,
             )
         elif error_code == 'ModelNotReadyException':
             raise BedrockAPIError(
-                message=f"Model {model_id} is not ready. Please try again in a few moments.",
+                message=f'Model {model_id} is not ready. Please try again in a few moments.',
                 error_code=error_code,
-                retryable=True
+                retryable=True,
             )
         elif error_code == 'ServiceUnavailableException':
             raise BedrockAPIError(
-                message="Bedrock service is temporarily unavailable. AWS SDK will automatically retry.",
+                message='Bedrock service is temporarily unavailable. AWS SDK will automatically retry.',
                 error_code=error_code,
-                retryable=True
+                retryable=True,
             )
         elif error_code == 'InternalServerException':
             raise BedrockAPIError(
-                message="Internal server error. AWS SDK will automatically retry.",
+                message='Internal server error. AWS SDK will automatically retry.',
                 error_code=error_code,
-                retryable=True
+                retryable=True,
             )
         else:
             # Unknown error - log for investigation
             logger.exception(
                 f'Unexpected AWS error: {error_code}',
-                extra={'model_id': model_id, 'error_code': error_code}
+                extra={'model_id': model_id, 'error_code': error_code},
             )
             raise BedrockAPIError(
-                message=f"API call failed: {error_message}",
-                error_code=error_code,
-                retryable=False
+                message=f'API call failed: {error_message}', error_code=error_code, retryable=False
             )
 
     except Exception as e:
         # Catch-all for unexpected errors
         logger.exception(
-            f'Unexpected error invoking Bedrock model: {model_id}',
-            extra={'model_id': model_id}
+            f'Unexpected error invoking Bedrock model: {model_id}', extra={'model_id': model_id}
         )
         raise BedrockAPIError(
-            message=f"Unexpected error: {str(e)}",
-            error_code='UnexpectedError',
-            retryable=False
+            message=f'Unexpected error: {str(e)}', error_code='UnexpectedError', retryable=False
         )
 
 
@@ -226,7 +212,7 @@ def save_images(
     base64_images: List[str],
     workspace_dir: Optional[str],
     filename_prefix: str,
-    output_format: OutputFormat = OutputFormat.PNG
+    output_format: OutputFormat = OutputFormat.PNG,
 ) -> List[str]:
     """Save base64-encoded images to workspace.
 
@@ -259,14 +245,10 @@ def save_images(
             os.makedirs(output_dir)
             logger.debug(f'Created output directory: {output_dir}')
     except Exception as e:
-        raise IOError(f"Failed to create output directory {output_dir}: {str(e)}")
+        raise IOError(f'Failed to create output directory {output_dir}: {str(e)}')
 
     # Determine file extension
-    extension_map = {
-        OutputFormat.JPEG: 'jpg',
-        OutputFormat.PNG: 'png',
-        OutputFormat.WEBP: 'webp'
-    }
+    extension_map = {OutputFormat.JPEG: 'jpg', OutputFormat.PNG: 'png', OutputFormat.WEBP: 'webp'}
     extension = extension_map.get(output_format, 'png')
 
     # Save the generated images
@@ -295,7 +277,7 @@ def save_images(
 
         except Exception as e:
             logger.error(f'Failed to save image {i + 1}: {str(e)}')
-            raise IOError(f"Failed to save image {i + 1}: {str(e)}")
+            raise IOError(f'Failed to save image {i + 1}: {str(e)}')
 
     logger.info(f'Successfully saved {len(saved_paths)} image(s)')
     return saved_paths

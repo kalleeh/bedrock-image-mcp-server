@@ -41,7 +41,7 @@ else:
 
 
 def build_sd35_request(
-    params: Union[SD35TextToImageParams, SD35ImageToImageParams]
+    params: Union[SD35TextToImageParams, SD35ImageToImageParams],
 ) -> Dict[str, Any]:
     """Build API request body for SD3.5.
 
@@ -56,27 +56,27 @@ def build_sd35_request(
     """
     # Base request structure
     request_body: Dict[str, Any] = {
-        "prompt": params.prompt,
-        "seed": params.seed,
-        "output_format": params.output_format.value,
+        'prompt': params.prompt,
+        'seed': params.seed,
+        'output_format': params.output_format.value,
     }
 
     # Add negative prompt if provided
     if params.negative_prompt:
-        request_body["negative_prompt"] = params.negative_prompt
+        request_body['negative_prompt'] = params.negative_prompt
 
     # Handle text-to-image vs image-to-image
     if isinstance(params, SD35TextToImageParams):
         # Text-to-image mode
-        request_body["mode"] = GenerationMode.TEXT_TO_IMAGE.value
-        request_body["aspect_ratio"] = params.aspect_ratio.value
+        request_body['mode'] = GenerationMode.TEXT_TO_IMAGE.value
+        request_body['aspect_ratio'] = params.aspect_ratio.value
     else:
         # Image-to-image mode
-        request_body["mode"] = GenerationMode.IMAGE_TO_IMAGE.value
-        request_body["image"] = params.image
-        request_body["strength"] = params.strength
+        request_body['mode'] = GenerationMode.IMAGE_TO_IMAGE.value
+        request_body['image'] = params.image
+        request_body['strength'] = params.strength
 
-    logger.debug(f"Built SD3.5 request with mode: {request_body.get('mode')}")
+    logger.debug(f'Built SD3.5 request with mode: {request_body.get("mode")}')
     return request_body
 
 
@@ -84,7 +84,7 @@ async def generate_text_to_image(
     params: SD35TextToImageParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Generate image from text using SD3.5.
 
@@ -109,14 +109,14 @@ async def generate_text_to_image(
         ContentFilterError: On content filtering.
     """
     logger.info(
-        f"Generating SD3.5 text-to-image with aspect ratio: {params.aspect_ratio.value}",
+        f'Generating SD3.5 text-to-image with aspect ratio: {params.aspect_ratio.value}',
         extra={
             'model': 'sd3.5-large',
             'aspect_ratio': params.aspect_ratio.value,
             'seed': params.seed,
             'prompt_length': len(params.prompt),
-            'has_negative_prompt': params.negative_prompt is not None
-        }
+            'has_negative_prompt': params.negative_prompt is not None,
+        },
     )
 
     try:
@@ -125,15 +125,13 @@ async def generate_text_to_image(
 
         # Invoke Bedrock model
         result = await invoke_bedrock_model(
-            model_id=SD35_LARGE_MODEL_ID,
-            request_body=request_body,
-            bedrock_client=bedrock_client
+            model_id=SD35_LARGE_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
         )
 
         # Extract images from response
         base64_images = result.get('images', [])
         if not base64_images:
-            raise ValueError("No images returned from Bedrock API")
+            raise ValueError('No images returned from Bedrock API')
 
         # Determine filename prefix
         if filename:
@@ -146,7 +144,7 @@ async def generate_text_to_image(
             base64_images=base64_images,
             workspace_dir=workspace_dir,
             filename_prefix=filename_prefix,
-            output_format=params.output_format
+            output_format=params.output_format,
         )
 
         # Build response
@@ -160,29 +158,29 @@ async def generate_text_to_image(
             metadata={
                 'aspect_ratio': params.aspect_ratio.value,
                 'mode': GenerationMode.TEXT_TO_IMAGE.value,
-                'finish_reasons': result.get('finish_reasons', [])
-            }
+                'finish_reasons': result.get('finish_reasons', []),
+            },
         )
 
         logger.info(
-            f"SD3.5 text-to-image generation successful: {len(saved_paths)} image(s)",
+            f'SD3.5 text-to-image generation successful: {len(saved_paths)} image(s)',
             extra={
                 'model': 'sd3.5-large',
                 'images_count': len(saved_paths),
                 'aspect_ratio': params.aspect_ratio.value,
-                'output_dir': workspace_dir or 'current_directory'
-            }
+                'output_dir': workspace_dir or 'current_directory',
+            },
         )
         return response
 
     except Exception as e:
         logger.error(
-            f"SD3.5 text-to-image generation failed: {str(e)}",
+            f'SD3.5 text-to-image generation failed: {str(e)}',
             extra={
                 'model': 'sd3.5-large',
                 'error_type': type(e).__name__,
-                'aspect_ratio': params.aspect_ratio.value
-            }
+                'aspect_ratio': params.aspect_ratio.value,
+            },
         )
         raise
 
@@ -191,7 +189,7 @@ async def generate_image_to_image(
     params: SD35ImageToImageParams,
     bedrock_client: BedrockRuntimeClient,
     workspace_dir: Optional[str] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> ImageGenerationResponse:
     """Transform image using SD3.5.
 
@@ -218,21 +216,21 @@ async def generate_image_to_image(
         ContentFilterError: On content filtering.
     """
     logger.info(
-        f"Generating SD3.5 image-to-image with strength: {params.strength}",
+        f'Generating SD3.5 image-to-image with strength: {params.strength}',
         extra={
             'model': 'sd3.5-large',
             'mode': 'image-to-image',
             'strength': params.strength,
             'seed': params.seed,
-            'prompt_length': len(params.prompt)
-        }
+            'prompt_length': len(params.prompt),
+        },
     )
 
     try:
         # Handle file path input - convert to base64 if needed
         image_data = params.image
         if os.path.exists(params.image):
-            logger.debug(f"Loading image from file: {params.image}")
+            logger.debug(f'Loading image from file: {params.image}')
             with open(params.image, 'rb') as f:
                 image_bytes = f.read()
                 image_data = base64.b64encode(image_bytes).decode('utf-8')
@@ -245,15 +243,13 @@ async def generate_image_to_image(
 
         # Invoke Bedrock model
         result = await invoke_bedrock_model(
-            model_id=SD35_LARGE_MODEL_ID,
-            request_body=request_body,
-            bedrock_client=bedrock_client
+            model_id=SD35_LARGE_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
         )
 
         # Extract images from response
         base64_images = result.get('images', [])
         if not base64_images:
-            raise ValueError("No images returned from Bedrock API")
+            raise ValueError('No images returned from Bedrock API')
 
         # Determine filename prefix
         if filename:
@@ -266,7 +262,7 @@ async def generate_image_to_image(
             base64_images=base64_images,
             workspace_dir=workspace_dir,
             filename_prefix=filename_prefix,
-            output_format=params.output_format
+            output_format=params.output_format,
         )
 
         # Build response
@@ -280,29 +276,29 @@ async def generate_image_to_image(
             metadata={
                 'strength': params.strength,
                 'mode': GenerationMode.IMAGE_TO_IMAGE.value,
-                'finish_reasons': result.get('finish_reasons', [])
-            }
+                'finish_reasons': result.get('finish_reasons', []),
+            },
         )
 
         logger.info(
-            f"SD3.5 image-to-image transformation successful: {len(saved_paths)} image(s)",
+            f'SD3.5 image-to-image transformation successful: {len(saved_paths)} image(s)',
             extra={
                 'model': 'sd3.5-large',
                 'mode': 'image-to-image',
                 'images_count': len(saved_paths),
-                'strength': params.strength
-            }
+                'strength': params.strength,
+            },
         )
         return response
 
     except Exception as e:
         logger.error(
-            f"SD3.5 image-to-image transformation failed: {str(e)}",
+            f'SD3.5 image-to-image transformation failed: {str(e)}',
             extra={
                 'model': 'sd3.5-large',
                 'mode': 'image-to-image',
                 'error_type': type(e).__name__,
-                'strength': params.strength
-            }
+                'strength': params.strength,
+            },
         )
         raise
