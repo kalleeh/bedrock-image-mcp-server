@@ -28,6 +28,11 @@ is [retiring on 2026-09-30](#nova-canvas-is-retiring).
 For image-to-image, `transform_image_sd35` is the only option of the four; Ultra and Core are
 text-to-image only.
 
+**On seeds:** a fixed non-zero `seed` reproduces the same image reliably within a short window
+(verified 6/6 identical), but is best-effort rather than guaranteed — repeats separated by
+longer intervals occasionally differ, which appears to be Bedrock serving the request from a
+different backend. Use `seed=0` for explicitly random output.
+
 ## Features
 
 ### Stability AI Text-to-Image (4 tools) — recommended
