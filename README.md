@@ -3,28 +3,23 @@
 [![PyPI version](https://badge.fury.io/py/bedrock-image-mcp-server.svg)](https://badge.fury.io/py/bedrock-image-mcp-server)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CI](https://github.com/kalleeh/bedrock-image-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/kalleeh/bedrock-image-mcp-server/actions/workflows/ci.yml)
 [![GitHub Actions](https://github.com/kalleeh/bedrock-image-mcp-server/workflows/Publish%20to%20PyPI/badge.svg)](https://github.com/kalleeh/bedrock-image-mcp-server/actions)
 
 > **Note:** This is a community-maintained fork of [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) with additional features and improvements. Original work by Amazon Web Services under Apache 2.0 license.
 
 MCP server for generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
 
+## Which model should I use?
+
+For general text-to-image, use **`generate_image_sd35`** (Stable Diffusion 3.5 Large). It
+has noticeably better prompt adherence and output quality, and accepts prompts up to 10,000
+characters. Reach for the Nova Canvas tools when you need something only Nova offers:
+explicit pixel dimensions, a color palette, Nova style presets, or several images per request.
+
 ## Features
 
-### Amazon Nova Canvas (2 tools)
-
-#### Text-based image generation
-- Create images from text prompts with `generate_image`
-- Customizable dimensions (320-4096px), quality options, and negative prompting
-- Supports multiple image generation (1-5) in single request
-- Adjustable parameters like cfg_scale (1.1-10.0) and seeded generation
-
-#### Color-guided image generation
-- Generate images with specific color palettes using `generate_image_with_colors`
-- Define up to 10 hex color values to influence the image style and mood
-- Same customization options as text-based generation
-
-### Stable Diffusion 3.5 Large (2 tools)
+### Stable Diffusion 3.5 Large (2 tools) — recommended for text-to-image
 
 #### Text-to-image generation
 - Generate images from text prompts with `generate_image_sd35`
@@ -38,6 +33,19 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 - Strength parameter (0.0-1.0) controls transformation intensity
 - Supports file paths and base64 image inputs
 - All text-to-image parameters available
+
+### Amazon Nova Canvas (2 tools)
+
+#### Text-based image generation
+- Create images from text prompts with `generate_image`
+- Customizable dimensions (320-4096px), quality options, and negative prompting
+- Supports multiple image generation (1-5) in single request
+- Adjustable parameters like cfg_scale (1.1-10.0) and seeded generation
+
+#### Color-guided image generation
+- Generate images with specific color palettes using `generate_image_with_colors`
+- Define up to 10 hex color values to influence the image style and mood
+- Same customization options as text-based generation
 
 ### Stability AI Upscale Services (3 tools)
 
@@ -266,30 +274,16 @@ Make sure the AWS profile has permissions to access Amazon Bedrock and the image
 
 ## Usage Examples
 
-### Amazon Nova Canvas
+### Stable Diffusion 3.5 Large (start here)
 
-#### Basic Text-to-Image
+#### Text-to-Image
 ```python
-# Generate a simple image
-generate_image(
+# The recommended default for text-to-image
+generate_image_sd35(
     prompt="A serene mountain landscape at sunset",
-    width=1024,
-    height=1024
+    aspect_ratio="1:1"
 )
 ```
-
-#### Color-Guided Generation
-```python
-# Generate with specific color palette
-generate_image_with_colors(
-    prompt="A modern living room interior",
-    colors=["#2C3E50", "#ECF0F1", "#E74C3C"],
-    width=1280,
-    height=720
-)
-```
-
-### Stable Diffusion 3.5 Large
 
 #### Text-to-Image with Long Prompt
 ```python
@@ -310,6 +304,30 @@ transform_image_sd35(
     image="/path/to/image.jpg",
     strength=0.7,
     aspect_ratio="1:1"
+)
+```
+
+### Amazon Nova Canvas
+
+Use these when you need exact pixel dimensions, a color palette, or multiple images per request.
+
+#### Text-to-Image with Explicit Dimensions
+```python
+generate_image(
+    prompt="A serene mountain landscape at sunset",
+    width=1024,
+    height=1024
+)
+```
+
+#### Color-Guided Generation
+```python
+# Generate with specific color palette
+generate_image_with_colors(
+    prompt="A modern living room interior",
+    colors=["#2C3E50", "#ECF0F1", "#E74C3C"],
+    width=1280,
+    height=720
 )
 ```
 
