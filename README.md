@@ -505,32 +505,37 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
 
 ## Supported AWS Regions
 
-The following AWS regions support Amazon Bedrock with the image generation models used by this server:
+Region coverage differs sharply between the model families, and **no single region runs all of
+them**. Pick your `AWS_REGION` based on which tools you need.
 
-### Amazon Nova Canvas
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+| Tools | Regions |
+|---|---|
+| `generate_image_sd35`, `transform_image_sd35` (SD3.5 Large) | **us-west-2 only** |
+| The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 |
+| `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 |
 
-### Stable Diffusion 3.5 Large
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- eu-central-1 (Europe - Frankfurt)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+Practical consequences:
 
-### Stability AI Image Services
-- us-east-1 (US East - N. Virginia)
-- us-west-2 (US West - Oregon)
-- eu-west-1 (Europe - Ireland)
-- eu-central-1 (Europe - Frankfurt)
-- ap-southeast-1 (Asia Pacific - Singapore)
-- ap-northeast-1 (Asia Pacific - Tokyo)
+- **us-west-2** is the only region where SD3.5 works, and it also covers all 13 Stability
+  tools — so it is the best single choice for the recommended SD3.5-first workflow. Nova
+  Canvas is *not* available there.
+- **us-east-1** covers Nova Canvas plus the 13 Stability tools, but not SD3.5.
+- If you need both SD3.5 and Nova Canvas, you will need to run two server instances with
+  different `AWS_REGION` values.
 
-**Note**: Model availability may change. Check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html) for the most current information.
+The Stability AI tools are invoked through cross-region inference profiles (their model IDs
+carry a `us.` prefix), so they may route your request to another US region.
+
+**Note**: this table was verified by querying the Bedrock API, but availability changes. Check
+your own region with:
+
+```bash
+aws bedrock list-foundation-models --region us-west-2 \
+  --query "modelSummaries[?contains(modelId,'stability') || contains(modelId,'nova-canvas')].modelId"
+```
+
+See the [AWS Bedrock model support table](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html)
+for the authoritative list.
 
 ## Troubleshooting
 
@@ -541,12 +546,42 @@ The following AWS regions support Amazon Bedrock with the image generation model
 **Problem**: You receive errors indicating the model is not available or you don't have access.
 
 **Solutions**:
-1. Verify your AWS region supports the model you're trying to use (see [Supported AWS Regions](#supported-aws-regions))
+1. Verify your AWS region supports the model you're trying to use (see [Supported AWS Regions](#supported-aws-regions)).
+   `The provided model identifier is invalid` almost always means the model is not in your
+   region — most often SD3.5, which is us-west-2 only.
 2. Ensure you've requested model access in the AWS Bedrock console:
    - Go to AWS Bedrock console → Model access
    - Request access for the models you want to use
    - Wait for approval (usually instant for most models)
 3. Verify your IAM permissions include `bedrock:InvokeModel` for the specific model ARN
+
+#### "This Model is marked by provider as Legacy" (Nova Canvas)
+
+**Problem**: `generate_image` or `generate_image_with_colors` fails with
+`ResourceNotFoundException: Access denied. This Model is marked by provider as Legacy and you
+have not been actively using the model in the last 30 days.`
+
+**Cause**: AWS has classified Nova Canvas as a legacy model. Accounts that have not invoked it
+recently lose access to it, even with model access previously granted.
+
+**Solutions**:
+- Prefer `generate_image_sd35` (in us-west-2), which is the recommended text-to-image tool
+- Or re-request access in the Bedrock console to reactivate the model for your account
+
+#### "Response payload size exceeds limit" (Creative Upscale)
+
+**Problem**: `upscale_creative` fails with
+`{"detail":"Response payload size NNNNNNNN bytes exceeds limit"}`.
+
+**Cause**: Bedrock's `InvokeModel` caps the response size, and a 4K PNG upscale exceeds it.
+This is an API limit, not a bug in this server.
+
+**Solution**: request `output_format="jpeg"`. Creative upscale always returns roughly a
+3150x3150 image, which is ~24MB as PNG (over the cap) but ~5MB as JPEG.
+
+Note that a *smaller input* does not help — the output size is fixed, so a 256x256 input fails
+just the same with PNG. `upscale_conservative` and `upscale_fast` are unaffected and work with
+PNG.
 
 #### "Invalid image dimensions" errors
 

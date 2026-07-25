@@ -176,6 +176,11 @@ prompts up to 10,000 characters. Use the Nova Canvas tools when you need somethi
 Nova offers: explicit pixel width/height, a color palette, Nova style presets, or several
 images in one request.
 
+Region availability differs per model family, and no region has all of them. SD3.5 is
+us-west-2 only; the Stability AI tools are in us-east-1, us-east-2 and us-west-2; Nova
+Canvas is in us-east-1, eu-west-1 and ap-northeast-1. If a tool reports an invalid model
+identifier, the model is not available in the configured AWS_REGION.
+
 ## Available Tools
 
 ### Stable Diffusion 3.5 Large Tools (preferred for text-to-image)
@@ -830,6 +835,9 @@ async def mcp_upscale_creative(
     - Creativity parameter controls enhancement level
     - Optional style presets for specific aesthetics
     - Input: 64x64 to 1 megapixel (1024x1024)
+
+    IMPORTANT: use output_format="jpeg" for this tool. The result is around 3150x3150, which
+    exceeds the Bedrock response size limit as a PNG and fails regardless of input size.
 
     ## Creativity Parameter Guide
 
