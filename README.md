@@ -200,6 +200,12 @@ Create masks programmatically for use with `inpaint_image` and `remove_object` t
 
 Configure the MCP server in your MCP client configuration (e.g., for Amazon Q Developer CLI, edit `~/.aws/amazonq/mcp.json`):
 
+> **Pick your region deliberately.** The examples below use `us-west-2`, which is the only region
+> carrying the recommended text-to-image models (Ultra, Core and SD3.5) and also serves all 13
+> Stability edit/upscale/control tools. Nova Canvas is *not* in us-west-2 — use `us-east-1`,
+> `eu-west-1` or `ap-northeast-1` for that, and note it retires 2026-09-30. See
+> [Supported AWS Regions](#supported-aws-regions).
+
 ```json
 {
   "mcpServers": {
@@ -208,7 +214,7 @@ Configure the MCP server in your MCP client configuration (e.g., for Amazon Q De
       "args": ["bedrock-image-mcp-server@latest"],
       "env": {
         "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1",
+        "AWS_REGION": "us-west-2",
         "FASTMCP_LOG_LEVEL": "ERROR"
       },
       "disabled": false,
@@ -239,7 +245,7 @@ For Windows users, the MCP server configuration format is slightly different:
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR",
         "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
+        "AWS_REGION": "us-west-2"
       }
     }
   }
@@ -298,7 +304,7 @@ The MCP server uses the AWS profile specified in the `AWS_PROFILE` environment v
 ```json
 "env": {
   "AWS_PROFILE": "your-aws-profile",
-  "AWS_REGION": "us-east-1"
+  "AWS_REGION": "us-west-2"
 }
 ```
 
