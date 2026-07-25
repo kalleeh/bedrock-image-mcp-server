@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-25
+
+### Fixed
+- **Path traversal**: a caller-supplied `filename` could escape the workspace output directory
+  (`../x` wrote to the parent, an absolute path ignored `workspace_dir` entirely). Filenames are
+  now reduced to a safe basename and every write is confined to the output directory.
+- **Crash on prompts containing braces**: any prompt with `{...}` raised `KeyError` before the
+  request was sent, because structured log calls made loguru treat the message as a format string.
+- **Silent premium billing**: an unrecognised `quality` value (including `"Standard"`) resolved to
+  `premium` instead of being rejected.
+- Output format validation was skipped by `sketch_to_image`, `structure_control`, `style_guide`
+  and `style_transfer`, so `output_format="PNG"` raised there while working on every other tool.
+- Failures were reported to the MCP client twice, and service errors were flattened into a bare
+  `Exception`, so callers could not distinguish a retryable throttle from a permanent failure.
+- Nova Canvas accepted a `filename` argument and silently ignored it.
+- Docker healthcheck looked for a process name from before the fork rename, so every container
+  reported `unhealthy` forever.
+- `__init__.py` was left at 0.1.0 when the project bumped to 0.1.1.
+
+### Security
+- Added a decode limit for untrusted images and a size cap on generated masks, so oversized input
+  can no longer exhaust memory.
+- Base64 image data is now validated rather than silently truncated on corrupt input.
+
+### Changed
+- Blocking Bedrock calls, image decoding and image writing now run on worker threads, keeping the
+  event loop responsive during the 30-90s a generation takes.
+- Deduplicated the Stability service layer (-465 lines) behind shared helpers; the request bodies
+  sent to Bedrock are unchanged.
+- Documentation and tool descriptions now recommend `generate_image_sd35` for general
+  text-to-image work, with Nova Canvas positioned for its specific features.
+- Added a CI workflow running lint, format, type checks and tests on pull requests.
+
+### Removed
+- `BaseImageInput` and the `CommonImageGenerationResponse` alias from
+  `awslabs.bedrock_image_mcp_server.models` (both unused).
+- The deprecated `models.py` and `novacanvas.py` compatibility shims, which re-exported module
+  paths that never existed in this fork.
+- `DEFAULT_CONSERVATIVE_UPSCALE_CREATIVITY` (the API accepts no such parameter) and the unused
+  `image` field alias on the control parameter models.
+
+### Note
+All 20 MCP tools and every tool parameter are unchanged in this release; the removals above affect
+only Python-level imports, not the MCP interface.
+
 ## [0.1.0] - 2025-11-25
 
 ### Changed
