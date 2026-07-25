@@ -178,13 +178,26 @@ This MCP server provides tools for generating images using Amazon Nova Canvas, S
 
 ## Choosing a text-to-image tool
 
-Three Stability AI models form a quality ladder. Pick by what the user is doing:
+Three Stability AI models cover different jobs. Pick by what the image is for, not by
+whichever is newest:
 
-- **generate_image_core** — fastest and cheapest. Drafts, iteration, several concepts at once.
-- **generate_image_sd35** — balanced quality and cost. A good general default.
-- **generate_image_ultra** — highest quality. Final assets, and anything needing legible text.
+Stability AI's own "ideal for" guidance, with their credit cost per image:
 
-All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
+- **generate_image_ultra** (8 credits) — "Photorealistic, Large-Scale Output". Ideal for
+  "ultra-realistic imagery for luxury brands and high-end campaigns" and "professional print
+  media and large format applications". Their example: a luxury brand producing magazine
+  spreads. The only one of the three Stability credits with **typography**.
+- **generate_image_sd35** (6.5 credits) — "High-Quality, High-Quantity Creative Assets". Ideal
+  for "high-volume outputs like marketing campaigns and digital assets" and "professional use
+  cases at 1 megapixel resolution". Their example: a game team producing environment textures
+  and character concepts.
+- **generate_image_core** (3 credits) — "Fast and Affordable". Ideal for "rapid content
+  generation at scale" and "rapidly iterating on concepts during ideation". Their example: a
+  retailer generating product images for new arrivals.
+
+So: Ultra for a few premium, large-format or print pieces; SD3.5 when you need many good
+assets; Core when speed and cost dominate. Prefer Ultra when the image contains text. All
+three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
 Use the Nova Canvas tools only for something they cannot do: explicit pixel width/height, a
 color palette, Nova style presets, or several images in one request.
 
@@ -610,15 +623,34 @@ async def mcp_generate_image_sd35(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. BALANCED quality and cost.
 
-    This tool uses Stable Diffusion 3.5 Large and is a good general default for text-to-image.
-    It offers superior prompt adherence and supports longer prompts (up to 10,000 characters)
-    compared to Nova Canvas.
+    This tool uses Stable Diffusion 3.5 Large, a strong all-rounder and a good general default.
+    AWS positions it for concept art, visual effects and detailed product imagery across media,
+    gaming, advertising and retail. It renders a wide range of styles (3D, photography, painting,
+    line art) and handles long complex prompts up to 10,000 characters. AWS also credits it with
+    strong text quality, though Stability reserves their typography claim for Ultra.
+
+    Stability's guidance: ideal for "high-volume outputs like marketing campaigns and digital
+    assets" — websites, newsletters, marketing materials, concept art and game assets.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and legible text.
+    Stability AI's own "ideal for" guidance, with their credit cost per image:
+
+    - generate_image_ultra (8 credits) — "Photorealistic, Large-Scale Output". Ideal for
+      "ultra-realistic imagery for luxury brands and high-end campaigns", and "professional
+      print media and large format applications". Their example is a luxury brand producing
+      magazine spreads.
+    - generate_image_sd35 (6.5 credits) — "High-Quality, High-Quantity Creative Assets". Ideal
+      for "high-volume outputs like marketing campaigns and digital assets", and "professional
+      use cases at 1 megapixel resolution". Their example is a game team producing environment
+      textures and character concepts.
+    - generate_image_core (3 credits) — "Fast and Affordable". Ideal for "rapid content
+      generation at scale", and "rapidly iterating on concepts during ideation". Their example
+      is a retailer generating product images for new arrivals.
+
+    So: Ultra for a small number of premium, large-format or print pieces; SD3.5 when you need
+    many good assets; Core when speed and cost dominate. Stability credits only Ultra with
+    typography, so prefer it when the image contains text.
 
     Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
     a color palette, Nova style presets, or several images in one request.
@@ -735,16 +767,34 @@ async def mcp_generate_image_ultra(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. HIGHEST QUALITY option.
 
-    This tool uses Stable Image Ultra, Stability AI's flagship text-to-image model. It gives
-    the best photorealism, lighting and text rendering of the models available here, at a
-    higher cost per image and slightly slower than the alternatives.
+    This tool uses Stable Image Ultra, Stability AI's flagship text-to-image model. It draws on
+    their top models including SD3.5, and AWS describes it as excelling at typography, intricate
+    compositions, dynamic lighting, vibrant colours and artistic cohesion, producing photorealism
+    with exceptional detail. It costs more per image and is slightly slower than the others.
+
+    Stability's guidance: ideal for "ultra-realistic imagery for luxury brands and high-end
+    campaigns" and "professional print media and large format applications". Also the only one
+    of the three they credit with typography, so prefer it for text in the image.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and anything containing
-      legible text, or when the user asks for the best possible result.
+    Stability AI's own "ideal for" guidance, with their credit cost per image:
+
+    - generate_image_ultra (8 credits) — "Photorealistic, Large-Scale Output". Ideal for
+      "ultra-realistic imagery for luxury brands and high-end campaigns", and "professional
+      print media and large format applications". Their example is a luxury brand producing
+      magazine spreads.
+    - generate_image_sd35 (6.5 credits) — "High-Quality, High-Quantity Creative Assets". Ideal
+      for "high-volume outputs like marketing campaigns and digital assets", and "professional
+      use cases at 1 megapixel resolution". Their example is a game team producing environment
+      textures and character concepts.
+    - generate_image_core (3 credits) — "Fast and Affordable". Ideal for "rapid content
+      generation at scale", and "rapidly iterating on concepts during ideation". Their example
+      is a retailer generating product images for new arrivals.
+
+    So: Ultra for a small number of premium, large-format or print pieces; SD3.5 when you need
+    many good assets; Core when speed and cost dominate. Stability credits only Ultra with
+    typography, so prefer it when the image contains text.
 
     ## Requirements and limits
 
@@ -831,16 +881,33 @@ async def mcp_generate_image_core(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. FASTEST and cheapest option.
 
-    This tool uses Stable Image Core, Stability AI's fast tier. It is the quickest and least
-    expensive text-to-image model available here, at lower fidelity than SD3.5 or Ultra.
-    Prefer it when the user is iterating, wants several concepts, or does not need a
-    final-quality asset.
+    This tool uses Stable Image Core, Stability AI's fast tier, built on an enhanced SDXL. AWS
+    describes it as delivering exceptional speed and efficiency at consistent quality. It is the
+    quickest and least expensive option here, at lower fidelity than SD3.5 or Ultra.
+
+    Stability's guidance: ideal for "rapid content generation at scale" and "rapidly iterating
+    on concepts during ideation" — their example is a retailer generating product images for new
+    arrivals.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and legible text.
+    Stability AI's own "ideal for" guidance, with their credit cost per image:
+
+    - generate_image_ultra (8 credits) — "Photorealistic, Large-Scale Output". Ideal for
+      "ultra-realistic imagery for luxury brands and high-end campaigns", and "professional
+      print media and large format applications". Their example is a luxury brand producing
+      magazine spreads.
+    - generate_image_sd35 (6.5 credits) — "High-Quality, High-Quantity Creative Assets". Ideal
+      for "high-volume outputs like marketing campaigns and digital assets", and "professional
+      use cases at 1 megapixel resolution". Their example is a game team producing environment
+      textures and character concepts.
+    - generate_image_core (3 credits) — "Fast and Affordable". Ideal for "rapid content
+      generation at scale", and "rapidly iterating on concepts during ideation". Their example
+      is a retailer generating product images for new arrivals.
+
+    So: Ultra for a small number of premium, large-format or print pieces; SD3.5 when you need
+    many good assets; Core when speed and cost dominate. Stability credits only Ultra with
+    typography, so prefer it when the image contains text.
 
     ## Requirements and limits
 
