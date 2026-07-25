@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-07-25
+
+### Fixed
+- Every configuration example specified `AWS_REGION: us-east-1`, where none of the recommended
+  text-to-image tools work. SD3.5, Ultra and Core are us-west-2 only, so `generate_image_sd35`,
+  `generate_image_ultra`, `generate_image_core` and `transform_image_sd35` all failed with an
+  invalid model identifier for anyone who copied the docs. The examples now use us-west-2, which
+  also serves all 13 Stability edit, upscale and control tools.
+- Nova Canvas is not available in us-west-2. Added a note pointing at the region table for anyone
+  who needs it, along with the reminder that it retires 2026-09-30.
+
 ## [0.3.1] - 2026-07-25
 
 ### Changed

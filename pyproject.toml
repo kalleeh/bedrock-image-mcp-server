@@ -1,6 +1,6 @@
 [project]
 name = "bedrock-image-mcp-server"
-version = "0.3.1"
+version = "0.3.2"
 description = "Model Context Protocol (MCP) server for Amazon Bedrock image generation (Community Fork)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -101,7 +101,7 @@ docstring-code-format = true
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.1"
+version = "0.3.2"
 tag_format = "v$version"
 version_files = [
     "pyproject.toml:version",
