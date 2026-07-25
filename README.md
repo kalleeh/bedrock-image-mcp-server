@@ -14,15 +14,21 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 
 Three Stability AI text-to-image models form a quality ladder, all in us-west-2:
 
-| Tool | Model | Use it for | Strengths (per AWS) |
+| Tool | Model | Stability AI positions it for | Relative cost |
 |---|---|---|---|
-| `generate_image_ultra` | Stable Image Ultra | **Commercial and advertising creative, marketing campaigns, hero and product imagery, print** — anything client-facing | Typography, intricate compositions, dynamic lighting, vibrant colour, photorealism with exceptional detail |
-| `generate_image_sd35` | Stable Diffusion 3.5 Large | **Concept art, visual effects, product renders, billboards and print ads**; a good general default | Widest style range (3D, photography, painting, line art), long complex prompts, strong text quality — fewer spelling/kerning/spacing errors |
-| `generate_image_core` | Stable Image Core | **Drafts, exploring concepts, thumbnails, bulk work** — not client-facing deliverables | Speed and efficiency (enhanced SDXL), cheapest per image |
+| `generate_image_ultra` | Stable Image Ultra | "professional print media and large format applications"; "luxury brands and high-end campaigns". The only one of the three they credit with **typography** | 8 credits |
+| `generate_image_sd35` | Stable Diffusion 3.5 Large | "professional use cases at 1 megapixel"; "high-volume, high-quality digital assets like websites, newsletters, and marketing materials" | 6.5 credits |
+| `generate_image_core` | Stable Image Core | "rapidly iterating on concepts during ideation" — fast and affordable | 3 credits |
 
-**Doing professional or commercial work?** Use `generate_image_ultra`. Pick `generate_image_sd35`
-instead when you need a specific non-photographic style, or a lot of legible text in the image.
-Use `generate_image_core` only when speed or cost matters more than fidelity.
+**Doing professional or commercial work?** Use `generate_image_ultra` for a single high-value
+asset — print, large format, or anything with text in the image. Use `generate_image_sd35` when
+you need many professional assets rather than one hero image. Use `generate_image_core` only for
+drafts and iteration.
+
+Quotes and credit rates are from Stability AI's own API specification
+(`api.stability.ai/v2alpha/openapi`) and [newsroom](https://stability.ai/news-updates/stability-ais-top-3-text-to-image-models-now-available-in-amazon-bedrock).
+Credits are Stability's own billing unit; on Bedrock you are billed per image by AWS, so treat
+them as a cost *ratio* rather than a price.
 
 All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
 Reach for the Nova Canvas tools only for something they cannot do: explicit pixel dimensions,

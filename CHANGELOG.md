@@ -9,17 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Tool descriptions and documentation now say what each text-to-image model is *for*, not just
-  that one is "highest quality". Sourced from AWS's own positioning of the Stability AI models:
-  - `generate_image_ultra` — commercial and advertising creative, marketing assets, hero and
-    product imagery, print. Excels at typography, intricate composition, dynamic lighting and
-    photorealism.
-  - `generate_image_sd35` — concept art, visual effects, product renders, billboards and print
-    ads. Widest style range (3D, photography, painting, line art) and strong text quality.
-  - `generate_image_core` — drafts, concept exploration, thumbnails and bulk work. Explicitly
-    not for client-facing deliverables.
-- The previous wording credited good text rendering to Ultra alone. AWS credits SD3.5 with it
-  too ("fewer errors in spelling, kerning, letter forming and spacing"), so both now say so and
-  the tie-breaker is style range rather than typography.
+  that one is "highest quality", quoting Stability AI's own positioning:
+  - `generate_image_ultra` — "professional print media and large format applications" and
+    "luxury brands and high-end campaigns". The only one of the three Stability credits with
+    typography. Use for a single high-value asset.
+  - `generate_image_sd35` — "professional use cases at 1 megapixel resolution" and
+    "high-volume, high-quality digital assets like websites, newsletters, and marketing
+    materials". Use when producing many assets.
+  - `generate_image_core` — "rapidly iterating on concepts during ideation". Drafts and bulk
+    work, not client-facing deliverables.
+- Documents the relative cost per image as Stability's credit rates (Core 3, SD3.5 Large 6.5,
+  Ultra 8), noting they are a ratio rather than a Bedrock price.
+- Quotes are verified against Stability's own API specification at
+  `api.stability.ai/v2alpha/openapi` rather than paraphrased, since their documentation site is
+  JavaScript-rendered and not directly readable.
+- Corrects the split between the two professional tiers. Both Stability and AWS call SD3.5 Large
+  "ideal for professional use cases", which reads as competing with Ultra, but Stability's own
+  wording separates them by job: Ultra for print and large format, SD3.5 Large for high-volume
+  asset production. Only Ultra carries their typography claim, so the earlier note crediting
+  SD3.5 with text quality is now attributed to AWS specifically.
 
 ## [0.3.0] - 2026-07-25
 
