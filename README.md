@@ -14,11 +14,15 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 
 Three Stability AI text-to-image models form a quality ladder, all in us-west-2:
 
-| Tool | Model | Use it for |
-|---|---|---|
-| `generate_image_core` | Stable Image Core | Drafts, iteration, several concepts at once. Fastest and cheapest. |
-| `generate_image_sd35` | Stable Diffusion 3.5 Large | A good general default. Balanced quality and cost. |
-| `generate_image_ultra` | Stable Image Ultra | Final assets and anything with legible text. Highest quality. |
+| Tool | Model | Use it for | Strengths (per AWS) |
+|---|---|---|---|
+| `generate_image_ultra` | Stable Image Ultra | **Commercial and advertising creative, marketing campaigns, hero and product imagery, print** — anything client-facing | Typography, intricate compositions, dynamic lighting, vibrant colour, photorealism with exceptional detail |
+| `generate_image_sd35` | Stable Diffusion 3.5 Large | **Concept art, visual effects, product renders, billboards and print ads**; a good general default | Widest style range (3D, photography, painting, line art), long complex prompts, strong text quality — fewer spelling/kerning/spacing errors |
+| `generate_image_core` | Stable Image Core | **Drafts, exploring concepts, thumbnails, bulk work** — not client-facing deliverables | Speed and efficiency (enhanced SDXL), cheapest per image |
+
+**Doing professional or commercial work?** Use `generate_image_ultra`. Pick `generate_image_sd35`
+instead when you need a specific non-photographic style, or a lot of legible text in the image.
+Use `generate_image_core` only when speed or cost matters more than fidelity.
 
 All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
 Reach for the Nova Canvas tools only for something they cannot do: explicit pixel dimensions,

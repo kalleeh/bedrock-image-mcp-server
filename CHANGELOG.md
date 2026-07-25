@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-25
+
+### Changed
+- Tool descriptions and documentation now say what each text-to-image model is *for*, not just
+  that one is "highest quality". Sourced from AWS's own positioning of the Stability AI models:
+  - `generate_image_ultra` — commercial and advertising creative, marketing assets, hero and
+    product imagery, print. Excels at typography, intricate composition, dynamic lighting and
+    photorealism.
+  - `generate_image_sd35` — concept art, visual effects, product renders, billboards and print
+    ads. Widest style range (3D, photography, painting, line art) and strong text quality.
+  - `generate_image_core` — drafts, concept exploration, thumbnails and bulk work. Explicitly
+    not for client-facing deliverables.
+- The previous wording credited good text rendering to Ultra alone. AWS credits SD3.5 with it
+  too ("fewer errors in spelling, kerning, letter forming and spacing"), so both now say so and
+  the tie-breaker is style range rather than typography.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

@@ -178,13 +178,24 @@ This MCP server provides tools for generating images using Amazon Nova Canvas, S
 
 ## Choosing a text-to-image tool
 
-Three Stability AI models form a quality ladder. Pick by what the user is doing:
+Three Stability AI models cover different jobs. Pick by what the image is for, not by
+whichever is newest:
 
-- **generate_image_core** — fastest and cheapest. Drafts, iteration, several concepts at once.
-- **generate_image_sd35** — balanced quality and cost. A good general default.
-- **generate_image_ultra** — highest quality. Final assets, and anything needing legible text.
+- **generate_image_ultra** — highest fidelity: typography, intricate composition, dynamic
+  lighting, photorealism. Use for **commercial and advertising creative, marketing assets,
+  hero and product imagery, print** — anything client-facing where the image is the
+  deliverable. Costs more per image.
+- **generate_image_sd35** — strong all-rounder with the widest style range (3D, photography,
+  painting, line art) and excellent text rendering. Use for **concept art, visual effects,
+  product renders, billboards and print ads**, or when a specific non-photographic style
+  matters. Good default.
+- **generate_image_core** — fastest and cheapest (enhanced SDXL). Use for **drafts, exploring
+  several concepts, thumbnails and bulk work**. Not for client-facing deliverables.
 
-All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
+If the user asks for professional, commercial or marketing imagery, reach for
+generate_image_ultra — or generate_image_sd35 when they also need a particular style or a lot
+of legible text. All three accept prompts up to 10,000 characters and beat Nova Canvas on
+prompt adherence.
 Use the Nova Canvas tools only for something they cannot do: explicit pixel width/height, a
 color palette, Nova style presets, or several images in one request.
 
@@ -610,15 +621,30 @@ async def mcp_generate_image_sd35(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. BALANCED quality and cost.
 
-    This tool uses Stable Diffusion 3.5 Large and is a good general default for text-to-image.
-    It offers superior prompt adherence and supports longer prompts (up to 10,000 characters)
-    compared to Nova Canvas.
+    This tool uses Stable Diffusion 3.5 Large, a strong all-rounder and a good general default.
+    AWS positions it for concept art, visual effects and detailed product imagery across media,
+    gaming, advertising and retail. It renders a wide range of styles (3D, photography, painting,
+    line art), handles long complex prompts up to 10,000 characters, and has notably good text
+    quality: fewer errors in spelling, kerning, letter forming and spacing.
+
+    Best for: concept art, product renders, billboards and print ads, and any work needing a
+    specific non-photographic style or a lot of legible text.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and legible text.
+    - generate_image_ultra: highest fidelity. AWS positions it for typography, intricate
+      compositions, dynamic lighting and photorealism. Use for commercial and advertising
+      assets, hero images, print and anything where the image is the deliverable.
+    - generate_image_sd35: strong all-rounder with the widest style range (3D, photography,
+      painting, line art) and excellent text rendering. AWS positions it for concept art,
+      visual effects, product imagery, billboards and print ads. Good default.
+    - generate_image_core: fastest and cheapest, built on an enhanced SDXL. Use for drafts,
+      exploring several concepts, and bulk or throwaway work.
+
+    If the user asks for professional, commercial, marketing or client-facing imagery, use
+    generate_image_ultra, or generate_image_sd35 when they also need a specific non-photographic
+    style or a lot of legible text. Use generate_image_core only when speed or cost matters more
+    than fidelity.
 
     Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
     a color palette, Nova style presets, or several images in one request.
@@ -735,16 +761,29 @@ async def mcp_generate_image_ultra(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. HIGHEST QUALITY option.
 
-    This tool uses Stable Image Ultra, Stability AI's flagship text-to-image model. It gives
-    the best photorealism, lighting and text rendering of the models available here, at a
-    higher cost per image and slightly slower than the alternatives.
+    This tool uses Stable Image Ultra, Stability AI's flagship text-to-image model. It draws on
+    their top models including SD3.5, and AWS describes it as excelling at typography, intricate
+    compositions, dynamic lighting, vibrant colours and artistic cohesion, producing photorealism
+    with exceptional detail. It costs more per image and is slightly slower than the others.
+
+    Best for: commercial and advertising creative, marketing campaign assets, hero and product
+    imagery, print, and any final deliverable where image quality is the point.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and anything containing
-      legible text, or when the user asks for the best possible result.
+    - generate_image_ultra: highest fidelity. AWS positions it for typography, intricate
+      compositions, dynamic lighting and photorealism. Use for commercial and advertising
+      assets, hero images, print and anything where the image is the deliverable.
+    - generate_image_sd35: strong all-rounder with the widest style range (3D, photography,
+      painting, line art) and excellent text rendering. AWS positions it for concept art,
+      visual effects, product imagery, billboards and print ads. Good default.
+    - generate_image_core: fastest and cheapest, built on an enhanced SDXL. Use for drafts,
+      exploring several concepts, and bulk or throwaway work.
+
+    If the user asks for professional, commercial, marketing or client-facing imagery, use
+    generate_image_ultra, or generate_image_sd35 when they also need a specific non-photographic
+    style or a lot of legible text. Use generate_image_core only when speed or cost matters more
+    than fidelity.
 
     ## Requirements and limits
 
@@ -831,16 +870,29 @@ async def mcp_generate_image_core(
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. FASTEST and cheapest option.
 
-    This tool uses Stable Image Core, Stability AI's fast tier. It is the quickest and least
-    expensive text-to-image model available here, at lower fidelity than SD3.5 or Ultra.
-    Prefer it when the user is iterating, wants several concepts, or does not need a
-    final-quality asset.
+    This tool uses Stable Image Core, Stability AI's fast tier, built on an enhanced SDXL. AWS
+    describes it as delivering exceptional speed and efficiency at consistent quality. It is the
+    quickest and least expensive option here, at lower fidelity than SD3.5 or Ultra.
+
+    Best for: drafts, exploring several concepts quickly, thumbnails, and bulk or throwaway
+    work. Do not use it for client-facing or commercial deliverables; use generate_image_ultra
+    for those.
 
     ## Choosing between the text-to-image tools
 
-    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
-    - generate_image_sd35: balanced quality and cost. Good general default.
-    - generate_image_ultra: highest quality. Use for final assets and legible text.
+    - generate_image_ultra: highest fidelity. AWS positions it for typography, intricate
+      compositions, dynamic lighting and photorealism. Use for commercial and advertising
+      assets, hero images, print and anything where the image is the deliverable.
+    - generate_image_sd35: strong all-rounder with the widest style range (3D, photography,
+      painting, line art) and excellent text rendering. AWS positions it for concept art,
+      visual effects, product imagery, billboards and print ads. Good default.
+    - generate_image_core: fastest and cheapest, built on an enhanced SDXL. Use for drafts,
+      exploring several concepts, and bulk or throwaway work.
+
+    If the user asks for professional, commercial, marketing or client-facing imagery, use
+    generate_image_ultra, or generate_image_sd35 when they also need a specific non-photographic
+    style or a lot of legible text. Use generate_image_core only when speed or cost matters more
+    than fidelity.
 
     ## Requirements and limits
 
