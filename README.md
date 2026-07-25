@@ -508,11 +508,11 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
 Region coverage differs sharply between the model families, and **no single region runs all of
 them**. Pick your `AWS_REGION` based on which tools you need.
 
-| Tools | Regions |
-|---|---|
-| `generate_image_sd35`, `transform_image_sd35` (SD3.5 Large) | **us-west-2 only** |
-| The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 |
-| `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 |
+| Tools | Regions | Lifecycle |
+|---|---|---|
+| `generate_image_sd35`, `transform_image_sd35` (SD3.5 Large) | **us-west-2 only** | Active |
+| The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 | Active |
+| `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 | **Legacy — EOL 2026-09-30** |
 
 Practical consequences:
 
@@ -523,19 +523,33 @@ Practical consequences:
 - If you need both SD3.5 and Nova Canvas, you will need to run two server instances with
   different `AWS_REGION` values.
 
-The Stability AI tools are invoked through cross-region inference profiles (their model IDs
-carry a `us.` prefix), so they may route your request to another US region.
+The Stability AI tools are invoked through US Geo cross-region inference profiles (their model
+IDs carry a `us.` prefix), so a request sent to any of the three regions may be served from
+another one. The underlying in-region model IDs are not enabled for direct on-demand use.
 
-**Note**: this table was verified by querying the Bedrock API, but availability changes. Check
-your own region with:
+### Nova Canvas is retiring
+
+AWS moved Nova Canvas to **Legacy on 2026-03-30, with end-of-life on 2026-09-30**. After that
+date the two Nova tools will stop working. AWS also restricts Legacy models in ways that bite
+before then:
+
+- New customers cannot start using a Legacy model at all
+- Existing customers **may lose access after 15 days of inactivity**, which surfaces as
+  `ResourceNotFoundException` (see [Troubleshooting](#this-model-is-marked-by-provider-as-legacy-nova-canvas))
+
+If you rely on Nova Canvas today, plan to move to `generate_image_sd35` in us-west-2.
+
+**Note**: verified against both the Bedrock API (`GetFoundationModel` lifecycle status) and the
+AWS model cards. Availability changes, so check your own region with:
 
 ```bash
 aws bedrock list-foundation-models --region us-west-2 \
-  --query "modelSummaries[?contains(modelId,'stability') || contains(modelId,'nova-canvas')].modelId"
+  --query "modelSummaries[?contains(modelId,'stability') || contains(modelId,'nova-canvas')].[modelId,modelLifecycle.status]"
 ```
 
-See the [AWS Bedrock model support table](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html)
-for the authoritative list.
+See the AWS [regional availability by model](https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html)
+and [model lifecycle](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+pages for the authoritative lists.
 
 ## Troubleshooting
 
@@ -561,12 +575,17 @@ for the authoritative list.
 `ResourceNotFoundException: Access denied. This Model is marked by provider as Legacy and you
 have not been actively using the model in the last 30 days.`
 
-**Cause**: AWS has classified Nova Canvas as a legacy model. Accounts that have not invoked it
-recently lose access to it, even with model access previously granted.
+**Cause**: AWS moved Nova Canvas to Legacy on 2026-03-30, with **end-of-life on 2026-09-30**.
+Per the AWS model lifecycle policy, existing customers may lose access to a Legacy model after
+**15 days of inactivity**, and new customers cannot use it at all. Previously granted model
+access does not exempt you.
 
 **Solutions**:
-- Prefer `generate_image_sd35` (in us-west-2), which is the recommended text-to-image tool
-- Or re-request access in the Bedrock console to reactivate the model for your account
+- Prefer `generate_image_sd35` in us-west-2. This is the recommended text-to-image tool and is
+  Active, so it is the migration path rather than a workaround.
+- To keep using Nova Canvas before EOL, re-request access in the Bedrock console and invoke it
+  at least once every 15 days.
+- Note that after 2026-09-30 the two Nova tools will stop working regardless.
 
 #### "Response payload size exceeds limit" (Creative Upscale)
 

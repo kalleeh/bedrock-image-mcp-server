@@ -176,6 +176,10 @@ prompts up to 10,000 characters. Use the Nova Canvas tools when you need somethi
 Nova offers: explicit pixel width/height, a color palette, Nova style presets, or several
 images in one request.
 
+Note that AWS has marked Nova Canvas as a Legacy model with end-of-life on 2026-09-30, and
+accounts can lose access to it after 15 days of inactivity. Treat generate_image_sd35 as the
+migration path.
+
 Region availability differs per model family, and no region has all of them. SD3.5 is
 us-west-2 only; the Stability AI tools are in us-east-1, us-east-2 and us-west-2; Nova
 Canvas is in us-east-1, eu-west-1 and ap-northeast-1. If a tool reports an invalid model
