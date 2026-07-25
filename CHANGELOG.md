@@ -8,89 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.1] - 2026-07-25
 
 ### Changed
-- Tool descriptions and documentation now say what each text-to-image model is *for*, not just
-  that one is "highest quality", quoting Stability AI's own positioning:
-  - `generate_image_ultra` — "professional print media and large format applications" and
-    "luxury brands and high-end campaigns". The only one of the three Stability credits with
-    typography. Use for a single high-value asset.
-  - `generate_image_sd35` — "professional use cases at 1 megapixel resolution" and
-    "high-volume, high-quality digital assets like websites, newsletters, and marketing
-    materials". Use when producing many assets.
-  - `generate_image_core` — "rapidly iterating on concepts during ideation". Drafts and bulk
-    work, not client-facing deliverables.
-- Documents the relative cost per image as Stability's credit rates (Core 3, SD3.5 Large 6.5,
-  Ultra 8), noting they are a ratio rather than a Bedrock price.
-- Removes the implication that SD3.5 Large is the better choice for non-photographic styles.
-  Neither Stability's specification nor AWS makes that claim, and a head-to-head test across
-  eight style categories with identical prompts and seeds contradicted it: Ultra matched or beat
-  SD3.5 everywhere, including anime, pixel art, watercolour and inked comic. The docs now say to
-  choose on budget and volume rather than on whether the target style is photographic, and note
-  that both models ignore halftone-dot requests and add shading when told not to.
-- Quotes are verified against Stability's own API specification at
-  `api.stability.ai/v2alpha/openapi` rather than paraphrased, since their documentation site is
-  JavaScript-rendered and not directly readable.
-- Corrects the split between the two professional tiers. Both Stability and AWS call SD3.5 Large
-  "ideal for professional use cases", which reads as competing with Ultra, but Stability's own
-  wording separates them by job: Ultra for print and large format, SD3.5 Large for high-volume
-  asset production. Only Ultra carries their typography claim, so the earlier note crediting
-  SD3.5 with text quality is now attributed to AWS specifically.
-
-## [0.3.0] - 2026-07-25
-
-### Added
-- **`generate_image_ultra`** (Stable Image Ultra) and **`generate_image_core`** (Stable Image
-  Core), completing a text-to-image quality ladder: Core for drafts, SD3.5 as the balanced
-  default, Ultra for final assets and legible text. Both were verified against live Bedrock.
-  - Available in us-west-2 only, alongside SD3.5.
-  - Text-to-image only. Neither accepts `mode`, `image` or `strength`; use
-    `transform_image_sd35` for image-to-image work.
-  - `output_format` accepts `png` or `jpeg` only. These two models reject `webp`, unlike every
-    other tool here, so they use a narrower format enum and give a specific error message.
-  - Neither supports `width`/`height`, `cfg_scale`, `number_of_images` or `style_preset`; the
-    Bedrock API rejects those fields. Use `aspect_ratio` to control the shape.
-
-### Changed
-- Documentation and tool descriptions now present the three-model ladder rather than naming a
-  single preferred text-to-image tool.
-
-## [0.2.0] - 2026-07-25
-
-### Fixed
-- **Path traversal**: a caller-supplied `filename` could escape the workspace output directory
-  (`../x` wrote to the parent, an absolute path ignored `workspace_dir` entirely). Filenames are
-  now reduced to a safe basename and every write is confined to the output directory.
-- **Crash on prompts containing braces**: any prompt with `{...}` raised `KeyError` before the
-  request was sent, because structured log calls made loguru treat the message as a format string.
-- **Silent premium billing**: an unrecognised `quality` value (including `"Standard"`) resolved to
-  `premium` instead of being rejected.
-- Output format validation was skipped by `sketch_to_image`, `structure_control`, `style_guide`
-  and `style_transfer`, so `output_format="PNG"` raised there while working on every other tool.
-- Failures were reported to the MCP client twice, and service errors were flattened into a bare
-  `Exception`, so callers could not distinguish a retryable throttle from a permanent failure.
-- Nova Canvas accepted a `filename` argument and silently ignored it.
-- Docker healthcheck looked for a process name from before the fork rename, so every container
-  reported `unhealthy` forever.
-- `__init__.py` was left at 0.1.0 when the project bumped to 0.1.1.
-
-### Deprecated
-- **`generate_image` and `generate_image_with_colors` (Amazon Nova Canvas).** AWS marked Nova
-  Canvas as a Legacy model on 2026-03-30 and retires it on **2026-09-30**, after which both tools
-  will stop working. AWS also revokes Legacy model access after 15 days of inactivity and blocks
-  new customers entirely.
-  - Use **`generate_image_sd35`** (Stable Diffusion 3.5 Large, us-west-2) instead. It has better
-    prompt adherence and is an Active model.
-  - `generate_image_with_colors` has no direct replacement; describe the desired colours in the
-    prompt to `generate_image_sd35`.
-  - Nova-only parameters with no SD3.5 equivalent: `width`, `height`, `quality`, `cfg_scale`,
-    `number_of_images`, `style`. SD3.5 uses `aspect_ratio` and `output_format` instead.
-  - Both tools still work unchanged in this release. Nothing has been renamed or repointed.
-
-### Compatibility policy
-`generate_image` will **not** be silently repointed at a different model. Six of its eleven
-parameters have no SD3.5 equivalent, so swapping the model behind the existing name would accept
-calls and then quietly ignore the dimensions, quality and image count the caller asked for. The
-Nova tools instead keep their current behaviour until the AWS end-of-life date and will then be
-removed in a major release. New capabilities arrive as new tool names.
+- Tool descriptions and documentation now carry Stability AI's own "ideal for" guidance for each
+  text-to-image model, rather than a quality ranking:
+  - `generate_image_ultra` — "Photorealistic, Large-Scale Output". Ideal for "ultra-realistic
+    imagery for luxury brands and high-end campaigns" and "professional print media and large
+    format applications". The only one of the three Stability credits with typography.
+  - `generate_image_sd35` — "High-Quality, High-Quantity Creative Assets". Ideal for
+    "high-volume outputs like marketing campaigns and digital assets".
+  - `generate_image_core` — "Fast and Affordable". Ideal for "rapid content generation at scale"
+    and "rapidly iterating on concepts during ideation".
+- Documents Stability's credit cost per image (Core 3, SD3.5 Large 6.5, Ultra 8) as a cost ratio
+  rather than a Bedrock price, since AWS does not publish per-image rates for these models.
+- Quotes are taken from Stability's Bedrock launch post and their API specification at
+  `api.stability.ai/v2alpha/openapi`, so the guidance is attributable rather than inferred.
 
 ### Security
 - Added a decode limit for untrusted images and a size cap on generated masks, so oversized input

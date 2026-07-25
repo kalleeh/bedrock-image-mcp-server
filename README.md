@@ -14,38 +14,21 @@ MCP server for generating and editing images using Amazon Nova Canvas, Stable Di
 
 Three Stability AI text-to-image models form a quality ladder, all in us-west-2:
 
-| Tool | Model | Stability AI positions it for | Relative cost |
+| Tool | Model | Stability AI: "Ideal For" | Credits |
 |---|---|---|---|
-| `generate_image_ultra` | Stable Image Ultra | "professional print media and large format applications"; "luxury brands and high-end campaigns". The only one of the three they credit with **typography** | 8 credits |
-| `generate_image_sd35` | Stable Diffusion 3.5 Large | "professional use cases at 1 megapixel"; "high-volume, high-quality digital assets like websites, newsletters, and marketing materials" | 6.5 credits |
-| `generate_image_core` | Stable Image Core | "rapidly iterating on concepts during ideation" — fast and affordable | 3 credits |
+| `generate_image_ultra` | Stable Image Ultra — *"Photorealistic, Large-Scale Output"* | "Ultra-realistic imagery for luxury brands and high-end campaigns"; "professional print media and large format applications". Their example: a luxury brand producing magazine spreads | 8 |
+| `generate_image_sd35` | Stable Diffusion 3.5 Large — *"High-Quality, High-Quantity Creative Assets"* | "High-volume outputs like marketing campaigns and digital assets"; "professional use cases at 1 megapixel resolution". Their example: a game team producing environment textures and character concepts | 6.5 |
+| `generate_image_core` | Stable Image Core — *"Fast and Affordable"* | "Rapid content generation at scale"; "rapidly iterating on concepts during ideation". Their example: a retailer generating product images for new arrivals | 3 |
 
-**Doing professional or commercial work?** Use `generate_image_ultra` for a single high-value
-asset — print, large format, or anything with text in the image. Use `generate_image_sd35` when
-you need many professional assets rather than one hero image, or to trade some fidelity for
-lower cost. Use `generate_image_core` only for drafts and iteration.
+**In short:** `generate_image_ultra` for a few premium, large-format or print pieces;
+`generate_image_sd35` when you need many good assets; `generate_image_core` when speed and cost
+dominate. Stability credits only Ultra with **typography**, so prefer it when the image contains
+text.
 
-**Ultra is not only for photography.** It is tempting to assume SD3.5 is the better choice for
-illustration, anime, fantasy or other non-photographic styles. We tested that: eight style
-categories, both models, identical prompts and seeds. Ultra matched or beat SD3.5 in every
-category, including anime, pixel art, watercolour and inked comic, and followed reductive
-instructions like "limited palette" and "heavy black inks" more literally. SD3.5 tended to add
-saturation and extra detail, and was clearly weaker at text and at small faces. Fantasy and line
-art were effectively ties.
-
-So pick by **budget and volume, not by whether the style is photographic**. Two caveats from the
-same test: neither model produced real halftone dots when asked, and both added shading to a
-"no shading" line-art prompt. One sample per cell at one seed, so treat the ties as ties.
-
-Quotes and credit rates are from Stability AI's own API specification
-(`api.stability.ai/v2alpha/openapi`) and [newsroom](https://stability.ai/news-updates/stability-ais-top-3-text-to-image-models-now-available-in-amazon-bedrock).
-Credits are Stability's own billing unit; on Bedrock you are billed per image by AWS, so treat
-them as a cost *ratio* rather than a price.
-
-All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
-Reach for the Nova Canvas tools only for something they cannot do: explicit pixel dimensions,
-a color palette, Nova style presets, or several images per request — and note that Nova Canvas
-is [retiring on 2026-09-30](#nova-canvas-is-retiring).
+All quotes are Stability AI's own words, from their
+[Bedrock launch post](https://stability.ai/news-updates/stability-ais-top-3-text-to-image-models-now-available-in-amazon-bedrock)
+and their API specification (`api.stability.ai/v2alpha/openapi`). Credits are Stability's billing
+unit — on Bedrock you are billed per image by AWS, so treat them as a cost *ratio*, not a price.
 
 For image-to-image, `transform_image_sd35` is the only option of the four; Ultra and Core are
 text-to-image only.
