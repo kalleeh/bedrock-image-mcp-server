@@ -67,6 +67,10 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     StylePreset,
     StyleTransferParams,
 )
+from awslabs.bedrock_image_mcp_server.models.stable_image_models import (
+    StableImageOutputFormat,
+    StableImageParams,
+)
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     resolve_output_path,
     sanitize_filename,
@@ -97,6 +101,10 @@ from awslabs.bedrock_image_mcp_server.services.stability_upscale import (
     upscale_conservative,
     upscale_creative,
     upscale_fast,
+)
+from awslabs.bedrock_image_mcp_server.services.stable_image_service import (
+    generate_image_core,
+    generate_image_ultra,
 )
 from awslabs.bedrock_image_mcp_server.utils.image_utils import (
     create_ellipse_mask,
@@ -170,26 +178,32 @@ This MCP server provides tools for generating images using Amazon Nova Canvas, S
 
 ## Choosing a text-to-image tool
 
-Prefer **generate_image_sd35** (Stable Diffusion 3.5 Large) for general text-to-image
-requests — it has noticeably better prompt adherence and output quality, and accepts
-prompts up to 10,000 characters. Use the Nova Canvas tools when you need something only
-Nova offers: explicit pixel width/height, a color palette, Nova style presets, or several
-images in one request.
+Three Stability AI models form a quality ladder. Pick by what the user is doing:
+
+- **generate_image_core** — fastest and cheapest. Drafts, iteration, several concepts at once.
+- **generate_image_sd35** — balanced quality and cost. A good general default.
+- **generate_image_ultra** — highest quality. Final assets, and anything needing legible text.
+
+All three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
+Use the Nova Canvas tools only for something they cannot do: explicit pixel width/height, a
+color palette, Nova style presets, or several images in one request.
 
 Note that AWS has marked Nova Canvas as a Legacy model with end-of-life on 2026-09-30, and
 accounts can lose access to it after 15 days of inactivity. Treat generate_image_sd35 as the
 migration path.
 
-Region availability differs per model family, and no region has all of them. SD3.5 is
-us-west-2 only; the Stability AI tools are in us-east-1, us-east-2 and us-west-2; Nova
+Region availability differs per model family, and no region has all of them. SD3.5, Ultra
+and Core are us-west-2 only; the Stability AI tools are in us-east-1, us-east-2 and us-west-2; Nova
 Canvas is in us-east-1, eu-west-1 and ap-northeast-1. If a tool reports an invalid model
 identifier, the model is not available in the configured AWS_REGION.
 
 ## Available Tools
 
-### Stable Diffusion 3.5 Large Tools (preferred for text-to-image)
-- **generate_image_sd35**: Generate an image from a text prompt using Stable Diffusion 3.5 Large.
-- **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance.
+### Stability AI Text-to-Image Tools (preferred)
+- **generate_image_ultra**: Highest quality text-to-image (Stable Image Ultra). Best photorealism and text rendering.
+- **generate_image_sd35**: Balanced text-to-image (Stable Diffusion 3.5 Large). Good general default.
+- **generate_image_core**: Fastest and cheapest text-to-image (Stable Image Core). Best for drafts.
+- **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance. The only image-to-image option of the four.
 
 ### Amazon Nova Canvas Tools (DEPRECATED — retires 2026-09-30)
 - **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas. Deprecated; prefer generate_image_sd35 unless you need explicit pixel dimensions, quality/cfg_scale tuning, Nova style presets, or several images per request.
@@ -259,6 +273,30 @@ def parse_output_format(output_format: str) -> OutputFormat:
     except ValueError:
         raise ValueError(
             f'Invalid output format: {output_format}. Must be one of: jpeg, png, webp'
+        )
+
+
+def parse_stable_image_format(output_format: str) -> StableImageOutputFormat:
+    """Convert a caller-supplied format string to a StableImageOutputFormat.
+
+    Stable Image Ultra and Core reject webp, so they accept a narrower set than the
+    other Stability AI tools.
+
+    Args:
+        output_format: Format name, case-insensitive (png or jpeg).
+
+    Returns:
+        The matching StableImageOutputFormat member.
+
+    Raises:
+        ValueError: If the format is not png or jpeg.
+    """
+    try:
+        return StableImageOutputFormat(output_format.lower())
+    except ValueError:
+        raise ValueError(
+            f'Invalid output format: {output_format}. Must be one of: png, jpeg. '
+            f'Stable Image Ultra and Core do not support webp.'
         )
 
 
@@ -570,13 +608,20 @@ async def mcp_generate_image_sd35(
         CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
     ),
 ) -> McpImageGenerationResponse:
-    """Generate an image from a text prompt. PREFERRED for general text-to-image.
+    """Generate an image from a text prompt. BALANCED quality and cost.
 
-    This tool uses Stable Diffusion 3.5 Large to generate images based on a text prompt.
-    SD3.5 offers superior prompt adherence and supports longer prompts (up to 10,000 characters)
-    compared to Nova Canvas, and is the recommended default for text-to-image generation.
+    This tool uses Stable Diffusion 3.5 Large and is a good general default for text-to-image.
+    It offers superior prompt adherence and supports longer prompts (up to 10,000 characters)
+    compared to Nova Canvas.
+
+    ## Choosing between the text-to-image tools
+
+    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
+    - generate_image_sd35: balanced quality and cost. Good general default.
+    - generate_image_ultra: highest quality. Use for final assets and legible text.
+
     Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
-    a color palette, or Nova-specific style presets.
+    a color palette, Nova style presets, or several images in one request.
 
     IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working
@@ -652,6 +697,198 @@ async def mcp_generate_image_sd35(
             raise ImageServiceError(f'Failed to generate SD3.5 image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_sd35: {str(e)}')
+        await ctx.error(str(e))
+        raise
+
+
+@mcp.tool(name='generate_image_ultra')
+async def mcp_generate_image_ultra(
+    ctx: Context,
+    prompt: str = Field(
+        description='The text description of the image to generate (1-10,000 characters)'
+    ),
+    aspect_ratio: str = Field(
+        default=DEFAULT_SD35_ASPECT_RATIO,
+        description='Aspect ratio: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, or 9:21',
+    ),
+    negative_prompt: Optional[str] = Field(
+        default=None,
+        description='Elements to exclude from the generated image (optional, up to 10,000 characters)',
+    ),
+    seed: int = Field(
+        default=DEFAULT_SD35_SEED,
+        description='Random seed for reproducibility (0-4,294,967,294). Use 0 for random.',
+    ),
+    output_format: str = Field(
+        default=DEFAULT_OUTPUT_FORMAT,
+        description='Output image format: png or jpeg. This model does not support webp.',
+    ),
+    workspace_dir: Optional[str] = Field(
+        default=None,
+        description="""The current workspace directory where the image should be saved.
+        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
+    ),
+    filename: Optional[str] = Field(
+        default=None,
+        description='The name of the file to save the image to (without extension)',
+    ),
+) -> McpImageGenerationResponse:
+    """Generate an image from a text prompt. HIGHEST QUALITY option.
+
+    This tool uses Stable Image Ultra, Stability AI's flagship text-to-image model. It gives
+    the best photorealism, lighting and text rendering of the models available here, at a
+    higher cost per image and slightly slower than the alternatives.
+
+    ## Choosing between the text-to-image tools
+
+    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
+    - generate_image_sd35: balanced quality and cost. Good general default.
+    - generate_image_ultra: highest quality. Use for final assets and anything containing
+      legible text, or when the user asks for the best possible result.
+
+    ## Requirements and limits
+
+    - Available in us-west-2 only
+    - Text-to-image only; it cannot transform an existing image. Use transform_image_sd35
+      for image-to-image work.
+    - output_format must be png or jpeg. webp is rejected by the model.
+    - Returns a single image per call. There is no width/height, cfg_scale or style preset;
+      use aspect_ratio to control the shape.
+
+    ## Example Usage
+
+    - Prompt: "a weathered brass compass on a nautical chart, macro photograph, soft window light"
+      Aspect Ratio: 3:2
+      (Produces a high-detail final asset)
+
+    Returns:
+        McpImageGenerationResponse: A response containing the generated image paths.
+    """
+    logger.debug(f"MCP tool generate_image_ultra called with prompt: '{prompt[:30]}...'")
+
+    try:
+        params = StableImageParams(
+            prompt=prompt,
+            aspect_ratio=parse_aspect_ratio(aspect_ratio),
+            seed=seed,
+            negative_prompt=negative_prompt,
+            output_format=parse_stable_image_format(output_format),
+        )
+
+        logger.info(f'Generating Stable Image Ultra image with aspect ratio: {aspect_ratio}')
+
+        response = await generate_image_ultra(
+            params=params,
+            bedrock_client=bedrock_runtime_client,
+            workspace_dir=workspace_dir,
+            filename=filename,
+        )
+
+        if response.status == 'success':
+            return McpImageGenerationResponse(
+                status='success',
+                paths=[f'file://{path}' for path in response.paths],
+            )
+        else:
+            raise ImageServiceError(f'Failed to generate Ultra image: {response.message}')
+    except Exception as e:
+        logger.error(f'Error in mcp_generate_image_ultra: {str(e)}')
+        await ctx.error(str(e))
+        raise
+
+
+@mcp.tool(name='generate_image_core')
+async def mcp_generate_image_core(
+    ctx: Context,
+    prompt: str = Field(
+        description='The text description of the image to generate (1-10,000 characters)'
+    ),
+    aspect_ratio: str = Field(
+        default=DEFAULT_SD35_ASPECT_RATIO,
+        description='Aspect ratio: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, or 9:21',
+    ),
+    negative_prompt: Optional[str] = Field(
+        default=None,
+        description='Elements to exclude from the generated image (optional, up to 10,000 characters)',
+    ),
+    seed: int = Field(
+        default=DEFAULT_SD35_SEED,
+        description='Random seed for reproducibility (0-4,294,967,294). Use 0 for random.',
+    ),
+    output_format: str = Field(
+        default=DEFAULT_OUTPUT_FORMAT,
+        description='Output image format: png or jpeg. This model does not support webp.',
+    ),
+    workspace_dir: Optional[str] = Field(
+        default=None,
+        description="""The current workspace directory where the image should be saved.
+        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
+    ),
+    filename: Optional[str] = Field(
+        default=None,
+        description='The name of the file to save the image to (without extension)',
+    ),
+) -> McpImageGenerationResponse:
+    """Generate an image from a text prompt. FASTEST and cheapest option.
+
+    This tool uses Stable Image Core, Stability AI's fast tier. It is the quickest and least
+    expensive text-to-image model available here, at lower fidelity than SD3.5 or Ultra.
+    Prefer it when the user is iterating, wants several concepts, or does not need a
+    final-quality asset.
+
+    ## Choosing between the text-to-image tools
+
+    - generate_image_core: fastest and cheapest. Use for drafts, iteration and bulk work.
+    - generate_image_sd35: balanced quality and cost. Good general default.
+    - generate_image_ultra: highest quality. Use for final assets and legible text.
+
+    ## Requirements and limits
+
+    - Available in us-west-2 only
+    - Text-to-image only; it cannot transform an existing image. Use transform_image_sd35
+      for image-to-image work.
+    - output_format must be png or jpeg. webp is rejected by the model.
+    - Returns a single image per call. There is no width/height, cfg_scale or style preset;
+      use aspect_ratio to control the shape.
+
+    ## Example Usage
+
+    - Prompt: "three thumbnail concepts for a coffee shop logo, flat vector"
+      Aspect Ratio: 1:1
+      (Produces a quick draft to iterate on)
+
+    Returns:
+        McpImageGenerationResponse: A response containing the generated image paths.
+    """
+    logger.debug(f"MCP tool generate_image_core called with prompt: '{prompt[:30]}...'")
+
+    try:
+        params = StableImageParams(
+            prompt=prompt,
+            aspect_ratio=parse_aspect_ratio(aspect_ratio),
+            seed=seed,
+            negative_prompt=negative_prompt,
+            output_format=parse_stable_image_format(output_format),
+        )
+
+        logger.info(f'Generating Stable Image Core image with aspect ratio: {aspect_ratio}')
+
+        response = await generate_image_core(
+            params=params,
+            bedrock_client=bedrock_runtime_client,
+            workspace_dir=workspace_dir,
+            filename=filename,
+        )
+
+        if response.status == 'success':
+            return McpImageGenerationResponse(
+                status='success',
+                paths=[f'file://{path}' for path in response.paths],
+            )
+        else:
+            raise ImageServiceError(f'Failed to generate Core image: {response.message}')
+    except Exception as e:
+        logger.error(f'Error in mcp_generate_image_core: {str(e)}')
         await ctx.error(str(e))
         raise
 

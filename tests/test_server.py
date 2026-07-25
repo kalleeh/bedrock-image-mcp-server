@@ -288,6 +288,8 @@ class TestServerIntegration:
             'generate_image',
             'generate_image_with_colors',
             'generate_image_sd35',
+            'generate_image_ultra',
+            'generate_image_core',
             'transform_image_sd35',
             'upscale_creative',
             'upscale_conservative',
