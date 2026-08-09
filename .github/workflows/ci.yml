@@ -38,3 +38,62 @@ jobs:
 
       - name: Pytest
         run: uv run pytest --cov=awslabs --cov-report=term-missing
+
+  fresh-install:
+    name: Fresh unlocked install (Python ${{ matrix.python-version }})
+    # The `test` job installs with `uv sync --frozen`, i.e. from uv.lock — so it keeps
+    # passing even when the declared ranges resolve to something broken. That is exactly
+    # how mcp 2.0 shipped a breaking change past a green CI: the lockfile pinned mcp 1.x
+    # while every real `uvx bedrock-image-mcp-server@latest` resolved to 2.x and died at
+    # import. This job deliberately ignores the lockfile and resolves fresh from the
+    # declared dependencies, then boots the server over stdio like a client would.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build the wheel
+        run: uv build --out-dir dist
+
+      - name: Install the wheel with freshly resolved dependencies
+        run: |
+          uv venv --python ${{ matrix.python-version }} .fresh
+          uv pip install --python .fresh --no-cache dist/*.whl
+
+      - name: Report the resolved mcp version
+        run: uv pip list --python .fresh | grep -E '^mcp '
+
+      - name: Boot the server over stdio and list tools
+        # No AWS credentials needed: initialize + tools/list never reach Bedrock. This
+        # fails loudly on an import-time crash, which is the failure mode being guarded.
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            > probe.jsonl
+          .fresh/bin/bedrock-image-mcp-server < probe.jsonl > out.jsonl
+          python - <<'PY'
+          import json, sys
+
+          tools = []
+          for line in open('out.jsonl'):
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  message = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if message.get('id') == 2:
+                  tools = [tool['name'] for tool in message.get('result', {}).get('tools', [])]
+          if 'generate_image_sd35' not in tools:
+              sys.exit(f'server did not advertise its tools; got {tools}')
+          print(f'OK: {len(tools)} tools advertised')
+          PY

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-08-09
+
+### Fixed
+- **Every fresh install was broken.** `mcp 2.0.0` (published 2026-07-28, three days after
+  0.3.2) removed `mcp.server.fastmcp` — `FastMCP` is now `MCPServer` under
+  `mcp.server.mcpserver`. Because the dependency was declared `mcp[cli]>=1.11.0` with no
+  upper bound, `uvx bedrock-image-mcp-server@latest` resolved `mcp` to 2.x and crashed at
+  import with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` before the server
+  could speak protocol — surfacing in MCP clients as an opaque transport error (`-32000`).
+  Existing users with a warm `uv` cache or a lockfile were unaffected, which made it look
+  intermittent. The requirement is now `mcp[cli]>=1.11.0,<2`; a fresh install resolves
+  `mcp` 1.29.0.
+
+### Added
+- A `fresh-install` CI job that resolves dependencies **unlocked** from the built wheel and
+  boots the server over stdio. The existing `test` job installs with `uv sync --frozen`,
+  i.e. from `uv.lock`, so it stayed green throughout this outage and structurally could not
+  have caught it — real users install unlocked.
+- Regression tests (`tests/test_dependency_bounds.py`) asserting the `<2` ceiling is present
+  and that it agrees with the API `server.py` actually imports, so the ceiling cannot be
+  dropped without porting to `mcp.server.mcpserver.MCPServer`.
+
 ## [0.3.2] - 2026-07-25
 
 ### Fixed
