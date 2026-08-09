@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.3] - 2026-08-09
 
+Reported and correctly diagnosed by [@aleck31](https://github.com/aleck31) in
+[#5](https://github.com/kalleeh/bedrock-image-mcp-server/issues/5), root cause and workaround
+included.
+
 ### Fixed
 - **Every fresh install was broken.** `mcp 2.0.0` (published 2026-07-28, three days after
   0.3.2) removed `mcp.server.fastmcp` — `FastMCP` is now `MCPServer` under
