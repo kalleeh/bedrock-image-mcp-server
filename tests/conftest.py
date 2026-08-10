@@ -17,6 +17,7 @@ import base64
 import json
 import pytest
 import tempfile
+from loguru import logger
 from typing import Dict, Generator, List
 from unittest.mock import AsyncMock, MagicMock
 
@@ -94,7 +95,30 @@ def mock_error_response() -> Dict:
 
 @pytest.fixture
 def mock_context() -> AsyncMock:
-    """Create a mock MCP context for testing."""
-    context = AsyncMock()
-    context.error = AsyncMock()
-    return context
+    """Create a mock MCP context for testing.
+
+    The tools declare ``ctx: Context`` but no longer call anything on it: the MCP logging
+    capability was deprecated by SEP-2577, so failures go to loguru and to the raised
+    exception instead. See the ``logged_errors`` fixture for asserting on that reporting.
+    """
+    return AsyncMock()
+
+
+@pytest.fixture
+def logged_errors() -> Generator[List[str], None, None]:
+    """Capture ERROR-level loguru records emitted while a tool runs.
+
+    This is the replacement for asserting on ``ctx.error``: it is the channel the tools
+    actually report failures on, so "reported exactly once" stays testable.
+    """
+    messages: List[str] = []
+
+    sink_id = logger.add(
+        lambda message: messages.append(message.record['message']),
+        level='ERROR',
+        format='{message}',
+    )
+    try:
+        yield messages
+    finally:
+        logger.remove(sink_id)

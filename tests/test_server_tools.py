@@ -19,9 +19,9 @@ Every tool exposed by the server is exercised here for three things:
    model handed to the underlying service carries the values the caller supplied under the
    field names that service expects.
 2. The failure path (service reports ``status='error'``) raises and reports the failure to
-   ``ctx.error`` exactly once -- a double report is a regression.
+   loguru exactly once -- a double report is a regression.
 3. Caller-supplied ``output_format`` strings are normalized case-insensitively and rejected
-   when unsupported, again reporting to ``ctx.error`` exactly once.
+   when unsupported, again reporting to loguru exactly once.
 
 The tools are MCPServer-decorated coroutines whose defaults are ``pydantic.Field`` objects, so
 calling them directly requires passing every parameter explicitly.
@@ -439,7 +439,7 @@ class TestSharedToolContract:
     """Behaviour every tool must share, checked across the whole tool surface."""
 
     @pytest.mark.parametrize('tool_name', SERVICE_TOOLS)
-    async def test_paths_are_returned_as_file_uris(self, tool_name, mock_context):
+    async def test_paths_are_returned_as_file_uris(self, tool_name, mock_context, logged_errors):
         """Test that service output paths are converted to file:// URIs."""
         tool, service, _ = TOOL_KWARGS[tool_name]
         with patch(f'{SERVER_MODULE}.{service}') as mock_service:
@@ -448,10 +448,12 @@ class TestSharedToolContract:
 
         assert result.status == 'success'
         assert result.paths == ['file:///tmp/a.png', 'file:///tmp/b.png']
-        mock_context.error.assert_not_called()
+        assert logged_errors == []
 
     @pytest.mark.parametrize('tool_name', SERVICE_TOOLS)
-    async def test_service_error_reports_exactly_once(self, tool_name, mock_context):
+    async def test_service_error_reports_exactly_once(
+        self, tool_name, mock_context, logged_errors
+    ):
         """Test that a failed service raises and reports the failure to ctx.error once."""
         tool, service, _ = TOOL_KWARGS[tool_name]
         with patch(f'{SERVER_MODULE}.{service}') as mock_service:
@@ -459,19 +461,23 @@ class TestSharedToolContract:
             with pytest.raises(Exception, match='service exploded'):
                 await tool(ctx=mock_context, **call_kwargs(tool_name))
 
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
     @pytest.mark.parametrize('tool_name', FORMAT_TOOLS)
-    async def test_uppercase_output_format_is_normalized(self, tool_name, mock_context):
+    async def test_uppercase_output_format_is_normalized(
+        self, tool_name, mock_context, logged_errors
+    ):
         """Test that an uppercase output_format is accepted and lowercased to the enum."""
         _, params, _ = await invoke_success(tool_name, mock_context, output_format='PNG')
 
         # Ultra and Core use a narrower format enum, so compare the value not the member.
         assert params.output_format.value == OutputFormat.PNG.value
-        mock_context.error.assert_not_called()
+        assert logged_errors == []
 
     @pytest.mark.parametrize('tool_name', FORMAT_TOOLS)
-    async def test_invalid_output_format_reports_exactly_once(self, tool_name, mock_context):
+    async def test_invalid_output_format_reports_exactly_once(
+        self, tool_name, mock_context, logged_errors
+    ):
         """Test that an unsupported output_format raises before any service call."""
         tool, service, _ = TOOL_KWARGS[tool_name]
         with patch(f'{SERVER_MODULE}.{service}') as mock_service:
@@ -479,7 +485,7 @@ class TestSharedToolContract:
                 await tool(ctx=mock_context, **call_kwargs(tool_name, output_format='tiff'))
 
         mock_service.assert_not_called()
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
     @pytest.mark.parametrize('tool_name', SERVICE_TOOLS)
     async def test_workspace_dir_and_filename_are_forwarded(
@@ -509,7 +515,9 @@ class TestSD35Tools:
         assert params.negative_prompt == 'blurry'
         assert params.seed == 42
 
-    async def test_generate_image_sd35_rejects_invalid_aspect_ratio(self, mock_context):
+    async def test_generate_image_sd35_rejects_invalid_aspect_ratio(
+        self, mock_context, logged_errors
+    ):
         """Test that an unsupported aspect ratio raises and reports to ctx.error once."""
         with patch(f'{SERVER_MODULE}.generate_text_to_image') as mock_service:
             with pytest.raises(ValueError, match='Invalid aspect ratio: 3:1'):
@@ -518,7 +526,7 @@ class TestSD35Tools:
                 )
 
         mock_service.assert_not_called()
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
     async def test_transform_image_sd35_forwards_image_and_strength(self, mock_context):
         """Test that transform_image_sd35 forwards the input image and strength knob."""
@@ -529,7 +537,9 @@ class TestSD35Tools:
         assert params.prompt == 'make it a watercolor'
         assert params.seed == 7
 
-    async def test_transform_image_sd35_rejects_undersized_image(self, mock_context):
+    async def test_transform_image_sd35_rejects_undersized_image(
+        self, mock_context, logged_errors
+    ):
         """Test that an image below the 64px minimum is rejected before the service call."""
         tiny_image = create_test_image_base64(32, 32)
         with patch(f'{SERVER_MODULE}.generate_image_to_image') as mock_service:
@@ -539,7 +549,7 @@ class TestSD35Tools:
                 )
 
         mock_service.assert_not_called()
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
 
 class TestUpscaleTools:
@@ -561,7 +571,9 @@ class TestUpscaleTools:
 
         assert params.style_preset is None
 
-    async def test_upscale_creative_rejects_unknown_style_preset(self, mock_context):
+    async def test_upscale_creative_rejects_unknown_style_preset(
+        self, mock_context, logged_errors
+    ):
         """Test that an unknown style preset raises and reports to ctx.error once."""
         with patch(f'{SERVER_MODULE}.upscale_creative') as mock_service:
             with pytest.raises(ValueError, match='Invalid style preset: watercolour'):
@@ -571,7 +583,7 @@ class TestUpscaleTools:
                 )
 
         mock_service.assert_not_called()
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
     async def test_upscale_conservative_forwards_params(self, mock_context):
         """Test that upscale_conservative builds ConservativeUpscaleParams as given."""
@@ -710,7 +722,9 @@ class TestMaskTools:
         assert result.paths[0].startswith('file://')
         return result.paths[0][len('file://') :]
 
-    async def test_rectangular_mask_writes_expected_png(self, mock_context, temp_workspace_dir):
+    async def test_rectangular_mask_writes_expected_png(
+        self, mock_context, temp_workspace_dir, logged_errors
+    ):
         """Test that create_rectangular_mask writes a valid PNG with a white rectangle."""
         result = await mcp_create_rectangular_mask(
             ctx=mock_context,
@@ -725,7 +739,7 @@ class TestMaskTools:
             assert mask.mode == 'L'
             assert mask.getpixel((30, 30)) == 255
             assert mask.getpixel((0, 0)) == 0
-        mock_context.error.assert_not_called()
+        assert logged_errors == []
 
     async def test_ellipse_mask_writes_expected_png(self, mock_context, temp_workspace_dir):
         """Test that create_ellipse_mask writes a valid PNG white at the ellipse center."""
@@ -797,7 +811,7 @@ class TestMaskTools:
         ],
     )
     async def test_invalid_mask_geometry_reports_exactly_once(
-        self, tool_name, overrides, expected, mock_context, temp_workspace_dir
+        self, tool_name, overrides, expected, mock_context, temp_workspace_dir, logged_errors
     ):
         """Test that invalid mask geometry raises and reports to ctx.error once."""
         tool = TOOL_KWARGS[tool_name][0]
@@ -807,6 +821,6 @@ class TestMaskTools:
                 **call_kwargs(tool_name, workspace_dir=temp_workspace_dir, **overrides),
             )
 
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
         output_dir = os.path.join(temp_workspace_dir, 'output')
         assert not os.path.exists(output_dir) or os.listdir(output_dir) == []
