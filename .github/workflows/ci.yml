@@ -17,10 +17,12 @@ jobs:
       matrix:
         python-version: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        # Pinned exactly: astral-sh stopped publishing floating major tags after v7, so
+        # there is no @v8 or @v9 to track.
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
@@ -53,10 +55,10 @@ jobs:
       matrix:
         python-version: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Build the wheel
         run: uv build --out-dir dist
