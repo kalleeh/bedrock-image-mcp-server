@@ -196,15 +196,16 @@ Create masks programmatically for use with `inpaint_image` and `remove_object` t
 
 | Cursor | VS Code |
 |:------:|:-------:|
-| [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=bedrock-image-mcp-server&config=eyJjb21tYW5kIjoidXZ4IGJlZHJvY2staW1hZ2UtbWNwLXNlcnZlckBsYXRlc3QiLCJlbnYiOnsiQVdTX1BST0ZJTEUiOiJ5b3VyLWF3cy1wcm9maWxlIiwiQVdTX1JFR0lPTiI6InVzLWVhc3QtMSIsIkZBU1RNQ1BfTE9HX0xFVkVMIjoiRVJST1IifSwiZGlzYWJsZWQiOmZhbHNlLCJhdXRvQXBwcm92ZSI6W119) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=Bedrock%20Image%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22bedrock-image-mcp-server%40latest%22%5D%2C%22env%22%3A%7B%22AWS_PROFILE%22%3A%22your-aws-profile%22%2C%22AWS_REGION%22%3A%22us-east-1%22%2C%22FASTMCP_LOG_LEVEL%22%3A%22ERROR%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) |
+| [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=bedrock-image-mcp-server&config=eyJjb21tYW5kIjoidXZ4IGJlZHJvY2staW1hZ2UtbWNwLXNlcnZlckBsYXRlc3QiLCJlbnYiOnsiQVdTX1BST0ZJTEUiOiJ5b3VyLWF3cy1wcm9maWxlIiwiQVdTX1JFR0lPTiI6InVzLXdlc3QtMiIsIkZBU1RNQ1BfTE9HX0xFVkVMIjoiRVJST1IifSwiZGlzYWJsZWQiOmZhbHNlLCJhdXRvQXBwcm92ZSI6W119) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=Bedrock%20Image%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22bedrock-image-mcp-server%40latest%22%5D%2C%22env%22%3A%7B%22AWS_PROFILE%22%3A%22your-aws-profile%22%2C%22AWS_REGION%22%3A%22us-west-2%22%2C%22FASTMCP_LOG_LEVEL%22%3A%22ERROR%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) |
 
 Configure the MCP server in your MCP client configuration (e.g., for Amazon Q Developer CLI, edit `~/.aws/amazonq/mcp.json`):
 
-> **Pick your region deliberately.** The examples below use `us-west-2`, which is the only region
-> carrying the recommended text-to-image models (Ultra, Core and SD3.5) and also serves all 13
-> Stability edit/upscale/control tools. Nova Canvas is *not* in us-west-2 — use `us-east-1`,
-> `eu-west-1` or `ap-northeast-1` for that, and note it retires 2026-09-30. See
-> [Supported AWS Regions](#supported-aws-regions).
+> **Pick your region deliberately.** The examples below use `us-west-2`, which is also the
+> default when `AWS_REGION` is unset. It is the only region carrying the recommended
+> text-to-image models (Ultra, Core and SD3.5) and it also serves all 13 Stability
+> edit/upscale/control tools, so every tool except Nova Canvas works there. Nova Canvas is
+> *not* in us-west-2 — use `us-east-1`, `eu-west-1` or `ap-northeast-1` for that, and note it
+> retires 2026-09-30. See [Supported AWS Regions](#supported-aws-regions).
 
 ```json
 {
@@ -272,7 +273,7 @@ AWS_SESSION_TOKEN=AQoEXAMPLEH4aoAH0gNCAPy...truncated...zrkuWJOgQs8IZZaIv2BXIa2R
           "--rm",
           "--interactive",
           "--env",
-          "AWS_REGION=us-east-1",
+          "AWS_REGION=us-west-2",
           "--env",
           "FASTMCP_LOG_LEVEL=ERROR",
           "--env-file",
@@ -568,16 +569,18 @@ them**. Pick your `AWS_REGION` based on which tools you need.
 |---|---|---|
 | `generate_image_ultra`, `generate_image_core`, `generate_image_sd35`, `transform_image_sd35` | **us-west-2 only** | Active |
 | The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 | Active |
+| `create_rectangular_mask`, `create_ellipse_mask`, `create_full_mask` | Any — these run locally and never call Bedrock | Active |
 | `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 | **Legacy — EOL 2026-09-30** |
 
 Practical consequences:
 
-- **us-west-2** is the only region where Ultra, Core and SD3.5 work, and it also covers all 13
-  Stability edit/upscale/control tools — so it is the best single choice. Nova Canvas is *not*
-  available there.
-- **us-east-1** covers Nova Canvas plus the 13 Stability tools, but none of the three
-  text-to-image models.
-- If you need both SD3.5 and Nova Canvas, you will need to run two server instances with
+- **us-west-2** is the default, and the only region where all 20 non-Nova tools work: the four
+  SD3.5/Ultra/Core tools, all 13 Stability edit/upscale/control tools, and the 3 local mask
+  helpers. Nova Canvas is the only thing missing.
+- **us-east-1 and us-east-2** are strict subsets — identical to each other in image-model
+  coverage, and missing all four text-to-image tools. us-east-1 adds only Nova Canvas, which
+  retires 2026-09-30; after that it offers nothing us-west-2 does not.
+- If you need both SD3.5 and Nova Canvas before the EOL date, run two server instances with
   different `AWS_REGION` values.
 
 The Stability AI tools are invoked through US Geo cross-region inference profiles (their model
@@ -644,20 +647,33 @@ access does not exempt you.
   at least once every 15 days.
 - Note that after 2026-09-30 the two Nova tools will stop working regardless.
 
-#### "Response payload size exceeds limit" (Creative Upscale)
+#### "Response payload size exceeds limit" (all three upscale tools)
 
-**Problem**: `upscale_creative` fails with
-`{"detail":"Response payload size NNNNNNNN bytes exceeds limit"}`.
+**Problem**: an upscale tool fails with
+`{"detail":"Response payload size NNNNNNNN bytes exceeds the maximum allowed size of 16777216 bytes"}`.
 
-**Cause**: Bedrock's `InvokeModel` caps the response size, and a 4K PNG upscale exceeds it.
-This is an API limit, not a bug in this server.
+**Cause**: this is a limit on output *size*, not on format support. Bedrock returns the image
+base64-encoded inside the JSON response and caps that response at 16MB, so the practical
+ceiling is roughly a 12MB image. Ordinary generation is ~2MB and never comes close; upscaling
+returns 3K-4K images, where a PNG is 20-35MB. It is an API limit, not a bug in this server.
 
-**Solution**: request `output_format="jpeg"`. Creative upscale always returns roughly a
-3150x3150 image, which is ~24MB as PNG (over the cap) but ~5MB as JPEG.
+PNG is supported and remains the default for every tool. The catch is that it is the default
+for the case most likely to exceed the cap — a full-size upscale.
 
-Note that a *smaller input* does not help — the output size is fixed, so a 256x256 input fails
-just the same with PNG. `upscale_conservative` and `upscale_fast` are unaffected and work with
-PNG.
+**Solution**: request `output_format="jpeg"` or `"webp"` for full-size upscales. Measured on a
+1MP input:
+
+| Tool | Output | PNG | JPEG | WebP |
+| --- | --- | --- | --- | --- |
+| `upscale_fast` | 4096x4096 | 34.8MB — fails | 4.1MB | 2.7MB |
+| `upscale_creative` | ~3152x3152 | fails at every input size | 1.9MB | 0.9MB |
+| `upscale_conservative` | ~3112x3112 | 20.1MB — fails | 2.4MB | 1.6MB |
+
+PNG does work when the output is small enough, because for `upscale_fast` and
+`upscale_conservative` the output scales with the input — a 256x256 input gave a 1.4MB PNG from
+fast and a 9.9MB PNG from conservative, and 512x512 gave a 5.9MB PNG from fast. `upscale_creative`
+is the exception: its output is a fixed ~3150x3150 whatever you feed it, so no input size makes
+PNG work there.
 
 #### "Invalid image dimensions" errors
 
@@ -695,9 +711,11 @@ PNG.
 **Problem**: Warning about input image being too large for creative upscaling.
 
 **Solutions**:
-1. Use `upscale_conservative` instead for larger images (up to 9.4MP)
+1. Use `upscale_conservative` instead for larger images (up to 9.4MP) — it is the only one of
+   the three that accepts inputs above 1MP
 2. Resize your input image to under 1MP before creative upscaling
-3. Use `upscale_fast` for quick 4x upscaling without size restrictions
+3. Note that `upscale_fast` has the same 1MP input cap as creative upscaling, so it is not a
+   workaround for an oversized input
 
 #### AWS credentials not found
 

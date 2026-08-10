@@ -209,6 +209,18 @@ STABILITY_SERVICES_INSTRUCTIONS = """
 
 ## Upscale Services
 
+**On output_format for upscaling.** All three formats (png, jpeg, webp) are supported here as
+everywhere else, and png is the default. The constraint is output *size*, not format: Bedrock
+returns the image base64-encoded in the JSON response and caps that response at 16MB, which
+works out to roughly a 12MB image. Ordinary generation is ~2MB and never comes close, but
+upscaling returns 3K-4K images, where a PNG is typically 20-35MB and the call fails with
+"Response payload size ... exceeds the maximum allowed size".
+
+So for a full-size upscale, pass output_format="jpeg" or "webp" (a few MB at the same
+resolution). PNG is fine when the result is small — a 256x256 input upscaled 4x came back as
+a 1.4MB PNG. Creative upscale is the exception: its output is a fixed ~3150x3150 no matter
+the input, so PNG has no working input size there.
+
 ### Creative Upscale
 - Upscales images to 4K resolution (20-40x)
 - Best for: Low-resolution images that need enhancement
@@ -218,6 +230,8 @@ STABILITY_SERVICES_INSTRUCTIONS = """
   - 0.5 = Maximum creative enhancement
 - Use descriptive prompts to guide the upscaling style
 - Supports style presets for specific aesthetics
+- Use output_format="jpeg" or "webp": the ~3150x3150 result is fixed, so it never fits the
+  16MB response limit as a PNG at any input size
 
 ### Conservative Upscale
 - Upscales to 4K while preserving original details
@@ -225,12 +239,16 @@ STABILITY_SERVICES_INSTRUCTIONS = """
 - Input: 64x64 to 9.4 megapixels
 - No creativity parameter - focuses on detail preservation
 - Still accepts prompts for context
+- Use output_format="jpeg" or "webp" for 1MP inputs: the ~3112x3112 result exceeds the 16MB
+  response limit as a PNG. PNG works from small inputs (256x256 in gave a 9.9MB PNG)
 
 ### Fast Upscale
 - Quick 4x upscaling without creative enhancement
 - Best for: Quick resolution increases
 - Input: 32x32 to 1 megapixel
 - Fastest option, minimal processing time
+- Output scales 4x with the input, so use output_format="jpeg" or "webp" above ~256x256:
+  a 1MP input yields 4096x4096, which exceeds the 16MB response limit as a PNG
 
 ## Edit Services
 

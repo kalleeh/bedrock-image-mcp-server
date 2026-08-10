@@ -1,6 +1,6 @@
 [project]
 name = "bedrock-image-mcp-server"
-version = "0.3.3"
+version = "0.4.0"
 description = "Model Context Protocol (MCP) server for Amazon Bedrock image generation (Community Fork)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,12 +8,12 @@ dependencies = [
     "boto3>=1.37.24",
     "botocore[crt]>=1.37.24",
     "loguru>=0.7.3",
-    # Upper bound is load-bearing: mcp 2.0 (2026-07-28) removed mcp.server.fastmcp
-    # entirely — FastMCP is now MCPServer under mcp.server.mcpserver. Without the
-    # ceiling, every fresh install resolves to 2.x and dies at import with
-    # ModuleNotFoundError before the server can speak protocol. Lift only alongside
-    # the port to the 2.0 API.
-    "mcp[cli]>=1.11.0,<2",
+    # Both bounds are load-bearing. The >=2 floor is required: server.py imports
+    # mcp.server.mcpserver, which does not exist before 2.0. The <3 ceiling is there
+    # because mcp 2.0 proved this project cannot absorb a major SDK bump silently —
+    # 2.0 deleted mcp.server.fastmcp outright and an unbounded requirement broke every
+    # fresh install at import. Lift the ceiling only alongside a port to the 3.0 API.
+    "mcp[cli]>=2,<3",
     "pillow>=10.0.0",
     "pydantic>=2.11.1",
 ]
@@ -106,7 +106,7 @@ docstring-code-format = true
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.3"
+version = "0.4.0"
 tag_format = "v$version"
 version_files = [
     "pyproject.toml:version",
