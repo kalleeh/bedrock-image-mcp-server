@@ -88,6 +88,13 @@ BEDROCK_CONNECT_TIMEOUT = 10  # Seconds to wait for connection
 BEDROCK_READ_TIMEOUT = 120  # Seconds to wait for response (image generation can take 30-90s)
 BEDROCK_MAX_POOL_CONNECTIONS = 50  # Connection pool size for concurrent requests
 
+# Seconds to keep serving after stdin reaches EOF while a tool call is still in flight, so the
+# response is not discarded. Sized just past BEDROCK_READ_TIMEOUT (120s) plus retries, which is
+# the longest a tool can legitimately run. The bound matters: EOF-triggered shutdown is
+# deliberate upstream (python-sdk#2231) because it stops the server outliving a dead client, so
+# a hung call must not wedge the process forever.
+STDIN_EOF_GRACE_SECONDS = 150
+
 
 # Nova Canvas Prompt Best Practices
 PROMPT_INSTRUCTIONS = """

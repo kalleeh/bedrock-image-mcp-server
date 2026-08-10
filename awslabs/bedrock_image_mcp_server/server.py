@@ -16,6 +16,7 @@
 import boto3
 import os
 import sys
+import threading
 import uuid
 from awslabs.bedrock_image_mcp_server import __version__
 from awslabs.bedrock_image_mcp_server.consts import (
@@ -44,6 +45,7 @@ from awslabs.bedrock_image_mcp_server.consts import (
     PROMPT_INSTRUCTIONS,
     SD35_PROMPT_INSTRUCTIONS,
     STABILITY_SERVICES_INSTRUCTIONS,
+    STDIN_EOF_GRACE_SECONDS,
 )
 from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
 from awslabs.bedrock_image_mcp_server.models.nova_models import McpImageGenerationResponse
@@ -175,6 +177,93 @@ except Exception as e:
     raise
 
 
+# Every tool declares `ctx: Context` but none of them call it. Failures now go to loguru and to
+# the raised exception (which mcp turns into isError plus the message) because SEP-2577
+# deprecated the MCP logging capability, so `ctx.error()` warns and is being retired. The
+# parameter stays because mcp injects it without exposing it in the tool's public schema, so it
+# costs callers nothing and keeps the seam for `ctx.report_progress()`, the supported way to
+# report progress on generations that take 30-90s.
+
+# In-flight request tracking, read by the stdin drain in main(). A threading primitive rather
+# than an asyncio one because the drain runs on its own thread, outside the event loop.
+_inflight_lock = threading.Lock()
+_inflight_requests = 0
+_no_requests_in_flight = threading.Event()
+_no_requests_in_flight.set()
+
+
+async def _track_inflight_requests(ctx, call_next):
+    """Count in-flight requests so stdin EOF can wait for them instead of dropping them.
+
+    Registered as server middleware, which wraps every inbound request. Doing it here rather
+    than in each tool keeps all 22 tool bodies free of lifecycle bookkeeping.
+    """
+    global _inflight_requests
+
+    # ctx.request_id is None for notifications, which have no response to lose.
+    if ctx.request_id is None:
+        return await call_next(ctx)
+
+    with _inflight_lock:
+        _inflight_requests += 1
+        _no_requests_in_flight.clear()
+    try:
+        return await call_next(ctx)
+    finally:
+        with _inflight_lock:
+            _inflight_requests -= 1
+            if _inflight_requests == 0:
+                _no_requests_in_flight.set()
+
+
+def _defer_stdin_eof(grace_seconds: float) -> None:
+    """Keep the server alive past stdin EOF while a tool call is still running.
+
+    The MCP stdio transport shuts the session down as soon as stdin hits EOF, cancelling any
+    in-flight tool call: the client gets ``-32000 Connection closed`` instead of the image it
+    waited a minute for (python-sdk#2678). A generation that has already been paid for should
+    not be thrown away because the client stopped writing.
+
+    The fix interposes a pipe on file descriptor 0 and pumps real stdin into it, holding the
+    write end open until in-flight work finishes. It has to be at the fd level: the transport
+    claims stdin by duplicating fd 0, so replacing ``sys.stdin`` would not be seen.
+
+    ``grace_seconds`` bounds the wait. EOF-triggered shutdown is intentional upstream
+    (python-sdk#2231) as a guard against servers outliving dead clients, so this delays that
+    shutdown rather than defeating it.
+    """
+    real_stdin_fd = os.dup(0)
+    read_fd, write_fd = os.pipe()
+    os.dup2(read_fd, 0)
+    os.close(read_fd)
+
+    def pump() -> None:
+        try:
+            while chunk := os.read(real_stdin_fd, 65536):
+                os.write(write_fd, chunk)
+        except OSError:
+            # Either end went away; fall through and let the transport see EOF.
+            pass
+
+        if not _no_requests_in_flight.is_set():
+            logger.info(
+                f'stdin closed with {_inflight_requests} request(s) in flight; '
+                f'finishing them before shutting down (up to {grace_seconds}s)'
+            )
+            if not _no_requests_in_flight.wait(timeout=grace_seconds):
+                logger.warning(
+                    f'Still busy after {grace_seconds}s past stdin EOF; shutting down anyway'
+                )
+
+        for fd in (write_fd, real_stdin_fd):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+    threading.Thread(target=pump, name='stdin-eof-drain', daemon=True).start()
+
+
 # Create the MCP server with detailed instructions.
 # Keep everything after the name as keyword arguments: mcp 2.0 added title, description and
 # version to the positional signature, so a positional second argument silently becomes title.
@@ -275,6 +364,7 @@ small outputs, except in upscale_creative whose output size is fixed.
         'pydantic',
         'boto3',
     ],
+    middleware=[_track_inflight_requests],
 )
 
 
@@ -485,7 +575,6 @@ async def mcp_generate_image(
             raise ImageServiceError(f'Failed to generate image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -598,7 +687,6 @@ async def mcp_generate_image_with_colors(
             raise ImageServiceError(f'Failed to generate color-guided image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_with_colors: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -742,7 +830,6 @@ async def mcp_generate_image_sd35(
             raise ImageServiceError(f'Failed to generate SD3.5 image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_sd35: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -856,7 +943,6 @@ async def mcp_generate_image_ultra(
             raise ImageServiceError(f'Failed to generate Ultra image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_ultra: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -969,7 +1055,6 @@ async def mcp_generate_image_core(
             raise ImageServiceError(f'Failed to generate Core image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_core: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1104,7 +1189,6 @@ async def mcp_transform_image_sd35(
             raise ImageServiceError(f'Failed to transform image with SD3.5: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_transform_image_sd35: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1241,7 +1325,6 @@ async def mcp_upscale_creative(
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_creative: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1345,7 +1428,6 @@ async def mcp_upscale_conservative(
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_conservative: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1435,7 +1517,6 @@ async def mcp_upscale_fast(
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_fast: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1539,7 +1620,6 @@ async def mcp_inpaint(
             raise ImageServiceError(f'Failed to inpaint image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_inpaint: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1660,7 +1740,6 @@ async def mcp_outpaint(
             raise ImageServiceError(f'Failed to outpaint image: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_outpaint: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1776,7 +1855,6 @@ async def mcp_search_replace(
             raise ImageServiceError(f'Failed to search and replace: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_search_replace: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1893,7 +1971,6 @@ async def mcp_search_recolor(
             raise ImageServiceError(f'Failed to search and recolor: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_search_recolor: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -1988,7 +2065,6 @@ async def mcp_remove_object(
             raise ImageServiceError(f'Failed to remove object: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_remove_object: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2061,7 +2137,6 @@ async def mcp_remove_background(
             raise ImageServiceError(f'Failed to remove background: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_remove_background: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2174,7 +2249,6 @@ async def mcp_sketch_to_image(
             raise ImageServiceError(f'Failed to convert sketch: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_sketch_to_image: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2291,7 +2365,6 @@ async def mcp_structure_control(
             )
     except Exception as e:
         logger.error(f'Error in mcp_structure_control: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2403,7 +2476,6 @@ async def mcp_style_guide(
             raise ImageServiceError(f'Failed to generate with style guide: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_style_guide: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2539,7 +2611,6 @@ async def mcp_style_transfer(
             raise ImageServiceError(f'Failed to transfer style: {response.message}')
     except Exception as e:
         logger.error(f'Error in mcp_style_transfer: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2623,7 +2694,6 @@ async def mcp_create_rectangular_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_rectangular_mask: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2707,7 +2777,6 @@ async def mcp_create_ellipse_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_ellipse_mask: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
@@ -2762,13 +2831,13 @@ async def mcp_create_full_mask(
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_full_mask: {str(e)}')
-        await ctx.error(str(e))
         raise
 
 
 def main():
     """Run the MCP server with CLI argument support."""
     logger.info('Starting bedrock-image-mcp-server MCP server')
+    _defer_stdin_eof(STDIN_EOF_GRACE_SECONDS)
     mcp.run()
 
 

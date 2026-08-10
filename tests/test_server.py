@@ -55,7 +55,12 @@ class TestMcpGenerateImage:
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_text')
     async def test_generate_image_success(
-        self, mock_generate_image, mock_context, sample_text_prompt, temp_workspace_dir
+        self,
+        mock_generate_image,
+        mock_context,
+        sample_text_prompt,
+        temp_workspace_dir,
+        logged_errors,
     ):
         """Test successful image generation."""
         # Set up the mock
@@ -100,13 +105,13 @@ class TestMcpGenerateImage:
         assert result.status == 'success'
         assert result.paths == ['file:///path/to/image1.png', 'file:///path/to/image2.png']
 
-        # Check that ctx.error was not called
-        mock_context.error.assert_not_called()
+        # Check that no error was logged
+        assert logged_errors == []
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_text')
     async def test_generate_image_error(
-        self, mock_generate_image, mock_context, sample_text_prompt
+        self, mock_generate_image, mock_context, sample_text_prompt, logged_errors
     ):
         """Test error handling in image generation."""
         # Set up the mock to return an error
@@ -118,9 +123,9 @@ class TestMcpGenerateImage:
         with pytest.raises(Exception, match='Failed to generate image: API error'):
             await mcp_generate_image(ctx=mock_context, prompt=sample_text_prompt)
 
-        # Check that ctx.error reported the failure exactly once
-        assert mock_context.error.call_count == 1
-        assert 'Failed to generate image: API error' in str(mock_context.error.call_args_list)
+        # Check that the failure was logged exactly once
+        assert len(logged_errors) == 1
+        assert 'Failed to generate image: API error' in str(logged_errors)
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_text')
@@ -154,7 +159,7 @@ class TestMcpGenerateImage:
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_text')
     async def test_generate_image_exception(
-        self, mock_generate_image, mock_context, sample_text_prompt
+        self, mock_generate_image, mock_context, sample_text_prompt, logged_errors
     ):
         """Test handling of exceptions during image generation."""
         # Set up the mock to raise an exception
@@ -164,9 +169,9 @@ class TestMcpGenerateImage:
         with pytest.raises(Exception, match='Unexpected error'):
             await mcp_generate_image(ctx=mock_context, prompt=sample_text_prompt)
 
-        # Check that ctx.error was called with the expected error message
-        assert mock_context.error.call_count == 1
-        assert 'Unexpected error' in str(mock_context.error.call_args_list)
+        # Check that the expected error message was logged
+        assert len(logged_errors) == 1
+        assert 'Unexpected error' in str(logged_errors)
 
 
 class TestMcpGenerateImageWithColors:
@@ -181,6 +186,7 @@ class TestMcpGenerateImageWithColors:
         sample_text_prompt,
         sample_colors,
         temp_workspace_dir,
+        logged_errors,
     ):
         """Test successful image generation with colors."""
         # Set up the mock
@@ -227,13 +233,13 @@ class TestMcpGenerateImageWithColors:
         assert result.status == 'success'
         assert result.paths == ['file:///path/to/image1.png', 'file:///path/to/image2.png']
 
-        # Check that ctx.error was not called
-        mock_context.error.assert_not_called()
+        # Check that no error was logged
+        assert logged_errors == []
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_colors')
     async def test_generate_image_with_colors_error(
-        self, mock_generate_image, mock_context, sample_text_prompt, sample_colors
+        self, mock_generate_image, mock_context, sample_text_prompt, sample_colors, logged_errors
     ):
         """Test error handling in image generation with colors."""
         # Set up the mock to return an error
@@ -247,11 +253,9 @@ class TestMcpGenerateImageWithColors:
                 ctx=mock_context, prompt=sample_text_prompt, colors=sample_colors
             )
 
-        # Check that ctx.error reported the failure exactly once
-        assert mock_context.error.call_count == 1
-        assert 'Failed to generate color-guided image: API error' in str(
-            mock_context.error.call_args_list
-        )
+        # Check that the failure was logged exactly once
+        assert len(logged_errors) == 1
+        assert 'Failed to generate color-guided image: API error' in str(logged_errors)
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_colors')
@@ -288,7 +292,7 @@ class TestMcpGenerateImageWithColors:
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.server.generate_image_with_colors')
     async def test_generate_image_with_colors_exception(
-        self, mock_generate_image, mock_context, sample_text_prompt, sample_colors
+        self, mock_generate_image, mock_context, sample_text_prompt, sample_colors, logged_errors
     ):
         """Test handling of exceptions during image generation with colors."""
         # Set up the mock to raise an exception
@@ -300,9 +304,9 @@ class TestMcpGenerateImageWithColors:
                 ctx=mock_context, prompt=sample_text_prompt, colors=sample_colors
             )
 
-        # Check that ctx.error was called with the expected error message
-        assert mock_context.error.call_count == 1
-        assert 'Unexpected error' in str(mock_context.error.call_args_list)
+        # Check that the expected error message was logged
+        assert len(logged_errors) == 1
+        assert 'Unexpected error' in str(logged_errors)
 
 
 class TestServerIntegration:
@@ -342,7 +346,7 @@ class TestServerIntegration:
         assert expected == registered
 
     async def test_registered_tools_expose_required_parameters(self):
-        """Test that every registered tool accepts workspace_dir and reports errors via ctx."""
+        """Test that every registered tool accepts workspace_dir and an injected context."""
         import inspect
         from awslabs.bedrock_image_mcp_server.server import mcp
 
@@ -353,9 +357,7 @@ class TestServerIntegration:
             assert 'workspace_dir' in sig.parameters, (
                 f'Tool {tool.name} missing workspace_dir parameter'
             )
-            assert 'ctx' in sig.parameters, (
-                f'Tool {tool.name} missing ctx parameter for error reporting'
-            )
+            assert 'ctx' in sig.parameters, f'Tool {tool.name} missing ctx parameter'
             assert tool.description, f'Tool {tool.name} missing description'
 
 
@@ -385,9 +387,9 @@ class TestValidationHelpers:
 
 
 class TestErrorsAreReportedOnce:
-    """Tests that a failing tool reports to the MCP context exactly once."""
+    """Tests that a failing tool logs the failure exactly once."""
 
-    async def test_invalid_aspect_ratio_reports_once(self, mock_context):
+    async def test_invalid_aspect_ratio_reports_once(self, mock_context, logged_errors):
         """Test the SD3.5 aspect-ratio failure is not double-reported to the client."""
         from awslabs.bedrock_image_mcp_server.server import mcp_generate_image_sd35
 
@@ -403,9 +405,9 @@ class TestErrorsAreReportedOnce:
                 filename=None,
             )
 
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1
 
-    async def test_invalid_output_format_reports_once(self, mock_context):
+    async def test_invalid_output_format_reports_once(self, mock_context, logged_errors):
         """Test a control tool's format failure is not double-reported to the client."""
         from awslabs.bedrock_image_mcp_server.server import mcp_sketch_to_image
 
@@ -422,4 +424,4 @@ class TestErrorsAreReportedOnce:
                 filename=None,
             )
 
-        assert mock_context.error.call_count == 1
+        assert len(logged_errors) == 1

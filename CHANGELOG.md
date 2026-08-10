@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A generation that finishes after the client closes stdin is no longer thrown away.** The
+  MCP stdio transport shuts the session down the moment stdin reaches EOF, cancelling any tool
+  call still running, so the client received `-32000 Connection closed` instead of the image it
+  had waited 30-90s for ([python-sdk#2678](https://github.com/modelcontextprotocol/python-sdk/issues/2678)).
+  The server now holds the transport open until in-flight calls finish, bounded by
+  `STDIN_EOF_GRACE_SECONDS` (150s, just past the 120s Bedrock read timeout). The bound matters:
+  EOF-triggered shutdown is deliberate upstream, to stop a server outliving a dead client, so
+  this delays that shutdown rather than defeating it. Long-lived clients (Claude Desktop,
+  Cursor, VS Code) hold stdin open and were never affected; this fixes piped and one-shot
+  invocations.
+
+### Changed
+- **Tool failures no longer emit an MCP log notification.** SEP-2577 deprecated the MCP logging
+  capability, so the 22 `ctx.error()` calls each raised a `MCPDeprecationWarning`. Failures are
+  now reported through the raised exception — which `mcp` still turns into `isError: true` plus
+  the message, verified over the wire — and to this server's stderr log. The only thing lost is
+  the duplicate `notifications/message`, which the protocol is retiring; clients that surface
+  tool errors see no change.
+
 ## [0.4.0] - 2026-08-10
 
 Completes the migration 0.3.3 deferred. That release capped `mcp` below 2.0 to stop fresh

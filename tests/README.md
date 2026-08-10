@@ -46,7 +46,7 @@ uv run pytest
 2. Mock only at the seams (`invoke_bedrock_model`, `save_images`) and assert on the real
    request bodies and responses the code builds
 3. Cover both success and error paths, including validation boundaries
-4. Assert that a failing tool reports to `ctx.error` exactly once
+4. Assert that a failing tool logs the failure exactly once (via the `logged_errors` fixture)
 5. Use fixtures from `conftest.py`, and write real temp files rather than patching
    `os.path.exists` — patching it mutates the shared `os` module and leaks into other tests
 6. Avoid assertions that only re-check a mock the test itself configured
