@@ -25,6 +25,10 @@ jobs:
         uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
+          # Without a suffix all four matrix jobs derive the same cache key and race to
+          # reserve it, so three of them log "Unable to reserve cache ... another job may
+          # be creating this cache". They install different dependency sets anyway.
+          cache-suffix: test-py${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync --frozen --python ${{ matrix.python-version }}
@@ -59,6 +63,12 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
+        with:
+          # This job exists to resolve dependencies with a cold cache, the way a real
+          # `uvx bedrock-image-mcp-server@latest` does. setup-uv v9 changed enable-cache
+          # from false to "auto", which turned caching on here by default — keep it off so
+          # the job keeps testing what it claims to.
+          enable-cache: false
 
       - name: Build the wheel
         run: uv build --out-dir dist
