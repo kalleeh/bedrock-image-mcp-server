@@ -233,6 +233,9 @@ identifier, the model is not available in the configured AWS_REGION.
 - **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas. Deprecated; no direct replacement, so describe the colours in a generate_image_sd35 prompt instead.
 
 ### Stability AI Upscale Tools
+All three support png (the default), jpeg and webp. Prefer jpeg or webp for full-size
+upscales: the 3K-4K result exceeds Bedrock's 16MB response limit as a PNG. PNG is fine for
+small outputs, except in upscale_creative whose output size is fixed.
 - **upscale_creative**: Upscale images to 4K with creative AI enhancement (20-40x upscale).
 - **upscale_conservative**: Upscale images to 4K while preserving original details.
 - **upscale_fast**: Fast 4x upscaling without creative enhancement.
@@ -1160,8 +1163,10 @@ async def mcp_upscale_creative(
     - Optional style presets for specific aesthetics
     - Input: 64x64 to 1 megapixel (1024x1024)
 
-    IMPORTANT: use output_format="jpeg" for this tool. The result is around 3150x3150, which
-    exceeds the Bedrock response size limit as a PNG and fails regardless of input size.
+    IMPORTANT: pass output_format="jpeg" (or "webp") for this tool. All three formats are
+    supported and png is the default, but this tool's output is a fixed ~3150x3150 regardless
+    of input size, and a PNG that large exceeds Bedrock's 16MB response limit — so there is no
+    input size at which the default succeeds here.
 
     ## Creativity Parameter Guide
 
@@ -1285,6 +1290,11 @@ async def mcp_upscale_conservative(
     - Minimal AI alterations
     - Input: 64x64 to 9.4 megapixels
 
+    NOTE ON output_format: png (the default), jpeg and webp are all supported. Prefer jpeg or
+    webp for 1MP inputs — the ~3112x3112 result is about 20MB as a PNG, over Bedrock's 16MB
+    response limit, and fails with "Response payload size ... exceeds the maximum allowed
+    size" even though the input passed validation. PNG succeeds from smaller inputs.
+
     ## When to Use
 
     - High-quality images that just need more resolution
@@ -1372,6 +1382,11 @@ async def mcp_upscale_fast(
     - No AI enhancement or style changes
     - Simple and straightforward
     - Input: 1024 to 1 megapixel (1024x1024)
+
+    NOTE ON output_format: png (the default), jpeg and webp are all supported. Output scales 4x
+    with the input, so prefer jpeg or webp for larger inputs — a 1 megapixel input returns
+    4096x4096, about 35MB as a PNG, over Bedrock's 16MB response limit. PNG works from small
+    inputs (256x256 in gives a 1.4MB PNG; 512x512 gives 5.9MB).
 
     ## When to Use
 

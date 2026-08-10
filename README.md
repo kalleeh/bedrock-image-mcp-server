@@ -647,20 +647,33 @@ access does not exempt you.
   at least once every 15 days.
 - Note that after 2026-09-30 the two Nova tools will stop working regardless.
 
-#### "Response payload size exceeds limit" (Creative Upscale)
+#### "Response payload size exceeds limit" (all three upscale tools)
 
-**Problem**: `upscale_creative` fails with
-`{"detail":"Response payload size NNNNNNNN bytes exceeds limit"}`.
+**Problem**: an upscale tool fails with
+`{"detail":"Response payload size NNNNNNNN bytes exceeds the maximum allowed size of 16777216 bytes"}`.
 
-**Cause**: Bedrock's `InvokeModel` caps the response size, and a 4K PNG upscale exceeds it.
-This is an API limit, not a bug in this server.
+**Cause**: this is a limit on output *size*, not on format support. Bedrock returns the image
+base64-encoded inside the JSON response and caps that response at 16MB, so the practical
+ceiling is roughly a 12MB image. Ordinary generation is ~2MB and never comes close; upscaling
+returns 3K-4K images, where a PNG is 20-35MB. It is an API limit, not a bug in this server.
 
-**Solution**: request `output_format="jpeg"`. Creative upscale always returns roughly a
-3150x3150 image, which is ~24MB as PNG (over the cap) but ~5MB as JPEG.
+PNG is supported and remains the default for every tool. The catch is that it is the default
+for the case most likely to exceed the cap — a full-size upscale.
 
-Note that a *smaller input* does not help — the output size is fixed, so a 256x256 input fails
-just the same with PNG. `upscale_conservative` and `upscale_fast` are unaffected and work with
-PNG.
+**Solution**: request `output_format="jpeg"` or `"webp"` for full-size upscales. Measured on a
+1MP input:
+
+| Tool | Output | PNG | JPEG | WebP |
+| --- | --- | --- | --- | --- |
+| `upscale_fast` | 4096x4096 | 34.8MB — fails | 4.1MB | 2.7MB |
+| `upscale_creative` | ~3152x3152 | fails at every input size | 1.9MB | 0.9MB |
+| `upscale_conservative` | ~3112x3112 | 20.1MB — fails | 2.4MB | 1.6MB |
+
+PNG does work when the output is small enough, because for `upscale_fast` and
+`upscale_conservative` the output scales with the input — a 256x256 input gave a 1.4MB PNG from
+fast and a 9.9MB PNG from conservative, and 512x512 gave a 5.9MB PNG from fast. `upscale_creative`
+is the exception: its output is a fixed ~3150x3150 whatever you feed it, so no input size makes
+PNG work there.
 
 #### "Invalid image dimensions" errors
 
@@ -698,9 +711,11 @@ PNG.
 **Problem**: Warning about input image being too large for creative upscaling.
 
 **Solutions**:
-1. Use `upscale_conservative` instead for larger images (up to 9.4MP)
+1. Use `upscale_conservative` instead for larger images (up to 9.4MP) — it is the only one of
+   the three that accepts inputs above 1MP
 2. Resize your input image to under 1MP before creative upscaling
-3. Use `upscale_fast` for quick 4x upscaling without size restrictions
+3. Note that `upscale_fast` has the same 1MP input cap as creative upscaling, so it is not a
+   workaround for an oversized input
 
 #### AWS credentials not found
 

@@ -32,12 +32,25 @@ variable also still works: it is read by this server's own logging setup, not by
   explicitly if you still need Nova Canvas.
 
 ### Fixed
-- The region default is now covered by a test (`tests/test_server.py`), which is why the last
-  one drifted from the docs unnoticed. The stale `us-east-1` also remained in the Docker
-  example and both the Cursor and VS Code install deeplinks; all now say us-west-2.
+- **The upscale tools now document Bedrock's 16MB response limit accurately.** Bedrock returns
+  images base64-encoded in the JSON response and caps it at 16MB, so a 3K-4K PNG (20-35MB)
+  cannot come back. Only `upscale_creative` mentioned this; the README additionally claimed
+  `upscale_conservative` and `upscale_fast` were "unaffected and work with PNG", which live
+  testing disproved (`upscale_fast` on a 1MP input returns 4096x4096 = 34.8MB as PNG, and
+  fails). All three tool descriptions, the server instructions and the README now recommend
+  JPEG or WebP for full-size upscales, with measured sizes per tool, and state that PNG still
+  works when the output is small — except in `upscale_creative`, whose ~3150x3150 output size
+  is fixed regardless of input. No format support and no code behaviour changed: png, jpeg and
+  webp are all still accepted by every tool, and png remains the default.
+- The README also claimed `upscale_fast` works "without size restrictions". It has the same
+  1MP input cap as `upscale_creative` (`consts.py`), so it is not a workaround for an
+  oversized input; only `upscale_conservative` accepts more (9.4MP).
 - The `<3` ceiling is now guarded from both sides. `tests/test_dependency_bounds.py` asserts
   the declared range and the API `server.py` imports cannot drift apart in either direction,
   so the next major SDK bump has to move both together.
+- The region default is now covered by a test (`tests/test_server.py`), which is why the last
+  one drifted from the docs unnoticed. The stale `us-east-1` also remained in the Docker
+  example and both the Cursor and VS Code install deeplinks; all now say us-west-2.
 
 ## [0.3.3] - 2026-08-09
 
