@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-10
+
+Completes the migration 0.3.3 deferred. That release capped `mcp` below 2.0 to stop fresh
+installs from crashing; this one ports to the 2.0 API and lifts the cap, so the project is no
+longer pinned to the maintenance-only 1.x branch of the SDK.
+
+### Changed
+- **Ported to the `mcp` 2.0 server API.** `FastMCP` is now `MCPServer` from
+  `mcp.server.mcpserver`. The requirement moves from `mcp[cli]>=1.11.0,<2` to
+  `mcp[cli]>=2,<3`; a fresh install resolves `mcp` 2.0.0. Python support is unchanged
+  (`mcp` 2.0 requires 3.10+, as does this package).
+- `serverInfo.version` now reports this package's version. `mcp` 2.0 no longer defaults it to
+  the SDK version, so it is passed explicitly.
+
+No tool was added, removed, renamed or resignatured — all 22 tools keep their names and
+parameters, so client configurations need no changes. The `FASTMCP_LOG_LEVEL` environment
+variable also still works: it is read by this server's own logging setup, not by the SDK.
+
+### Fixed
+- The `<3` ceiling is now guarded from both sides. `tests/test_dependency_bounds.py` asserts
+  the declared range and the API `server.py` imports cannot drift apart in either direction,
+  so the next major SDK bump has to move both together.
+
 ## [0.3.3] - 2026-08-09
 
 Reported and correctly diagnosed by [@aleck31](https://github.com/aleck31) in

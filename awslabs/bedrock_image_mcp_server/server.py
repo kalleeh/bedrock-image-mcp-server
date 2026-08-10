@@ -17,6 +17,7 @@ import boto3
 import os
 import sys
 import uuid
+from awslabs.bedrock_image_mcp_server import __version__
 from awslabs.bedrock_image_mcp_server.consts import (
     BEDROCK_CONNECT_TIMEOUT,
     BEDROCK_MAX_POOL_CONNECTIONS,
@@ -113,7 +114,7 @@ from awslabs.bedrock_image_mcp_server.utils.image_utils import (
 )
 from botocore.config import Config
 from loguru import logger
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 from pydantic import Field
 from typing import TYPE_CHECKING, List, Optional
 
@@ -168,9 +169,12 @@ except Exception as e:
     raise
 
 
-# Create the MCP server with detailed instructions
-mcp = FastMCP(
+# Create the MCP server with detailed instructions.
+# Keep everything after the name as keyword arguments: mcp 2.0 added title, description and
+# version to the positional signature, so a positional second argument silently becomes title.
+mcp = MCPServer(
     'bedrock-image-mcp-server',
+    version=__version__,
     instructions=f"""
 # Amazon Bedrock Image Generation
 

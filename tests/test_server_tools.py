@@ -23,7 +23,7 @@ Every tool exposed by the server is exercised here for three things:
 3. Caller-supplied ``output_format`` strings are normalized case-insensitively and rejected
    when unsupported, again reporting to ``ctx.error`` exactly once.
 
-The tools are FastMCP-decorated coroutines whose defaults are ``pydantic.Field`` objects, so
+The tools are MCPServer-decorated coroutines whose defaults are ``pydantic.Field`` objects, so
 calling them directly requires passing every parameter explicitly.
 """
 

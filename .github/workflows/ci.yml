@@ -72,27 +72,60 @@ jobs:
       - name: Boot the server over stdio and list tools
         # No AWS credentials needed: initialize + tools/list never reach Bedrock. This
         # fails loudly on an import-time crash, which is the failure mode being guarded.
+        #
+        # stdin is held open until the response arrives, the way a real client behaves.
+        # Piping a file in and letting it hit EOF does not work: under mcp 2.x the server
+        # can exit on EOF before it has drained the requests already in the buffer, which
+        # made this probe race and drop the tools/list reply about a third of the time.
         run: |
-          printf '%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
-            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            > probe.jsonl
-          .fresh/bin/bedrock-image-mcp-server < probe.jsonl > out.jsonl
           python - <<'PY'
-          import json, sys
+          import json, subprocess, sys, threading
 
-          tools = []
-          for line in open('out.jsonl'):
-              line = line.strip()
-              if not line:
-                  continue
-              try:
-                  message = json.loads(line)
-              except json.JSONDecodeError:
-                  continue
-              if message.get('id') == 2:
-                  tools = [tool['name'] for tool in message.get('result', {}).get('tools', [])]
+          requests = [
+              {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
+                  'protocolVersion': '2024-11-05',
+                  'capabilities': {},
+                  'clientInfo': {'name': 'ci', 'version': '1'},
+              }},
+              {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+              {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+          ]
+
+          server = subprocess.Popen(
+              ['.fresh/bin/bedrock-image-mcp-server'],
+              stdin=subprocess.PIPE,
+              stdout=subprocess.PIPE,
+              text=True,
+          )
+          watchdog = threading.Timer(60, server.kill)
+          watchdog.start()
+          try:
+              assert server.stdin is not None and server.stdout is not None
+              for request in requests:
+                  server.stdin.write(json.dumps(request) + '\n')
+              server.stdin.flush()
+
+              tools = None
+              for line in server.stdout:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      message = json.loads(line)
+                  except json.JSONDecodeError:
+                      continue
+                  if message.get('id') == 2:
+                      if 'error' in message:
+                          sys.exit(f'tools/list failed: {message["error"]}')
+                      tools = [t['name'] for t in message.get('result', {}).get('tools', [])]
+                      break
+          finally:
+              watchdog.cancel()
+              server.kill()
+              server.wait()
+
+          if tools is None:
+              sys.exit('server exited without answering tools/list')
           if 'generate_image_sd35' not in tools:
               sys.exit(f'server did not advertise its tools; got {tools}')
           print(f'OK: {len(tools)} tools advertised')
