@@ -132,7 +132,13 @@ else:
 
 # Bedrock Runtime Client with AWS best practice configuration
 bedrock_runtime_client: BedrockRuntimeClient
-aws_region: str = os.environ.get('AWS_REGION', 'us-east-1')
+# us-west-2 is the only region where every Bedrock-backed tool in this server works: it is
+# the sole home of SD3.5, Ultra and Core, and it also serves the 13 Stability
+# edit/upscale/control tools. us-east-1 and us-east-2 are strict subsets — identical to each
+# other, and missing all four text-to-image tools. Nova Canvas is the one thing us-west-2 lacks,
+# and it is Legacy with EOL 2026-09-30, so it does not justify a default that breaks the
+# recommended tools.
+aws_region: str = os.environ.get('AWS_REGION', 'us-west-2')
 
 # Configure retry logic following AWS best practices
 # Reference: https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/retry-backoff.html

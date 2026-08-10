@@ -13,12 +13,40 @@
 # limitations under the License.
 """Tests for the server module of the bedrock-image-mcp-server."""
 
+import importlib
+import os
 import pytest
 from awslabs.bedrock_image_mcp_server.server import (
     mcp_generate_image,
     mcp_generate_image_with_colors,
 )
 from unittest.mock import MagicMock, patch
+
+
+class TestDefaultRegion:
+    """Tests for the AWS region the server falls back to."""
+
+    def test_default_region_serves_every_bedrock_backed_tool(self):
+        """An unset AWS_REGION must land in us-west-2, the only fully-capable region.
+
+        us-west-2 is the sole home of SD3.5, Ultra and Core, and it also serves the 13
+        Stability edit/upscale/control tools. Defaulting anywhere else (us-east-1 and
+        us-east-2 are identical strict subsets) makes the four recommended text-to-image
+        tools fail with an invalid model identifier for anyone who never sets the variable.
+
+        The region is resolved at import time, so the module is reloaded under a cleared
+        environment rather than inspected as source.
+        """
+        import awslabs.bedrock_image_mcp_server.server as server_module
+
+        with patch.dict(os.environ, {}, clear=True):
+            reloaded = importlib.reload(server_module)
+            try:
+                assert reloaded.aws_region == 'us-west-2'
+            finally:
+                # Restore the module under the real environment so later tests and other
+                # modules keep the client this reload replaced.
+                importlib.reload(server_module)
 
 
 class TestMcpGenerateImage:

@@ -23,7 +23,18 @@ No tool was added, removed, renamed or resignatured — all 22 tools keep their 
 parameters, so client configurations need no changes. The `FASTMCP_LOG_LEVEL` environment
 variable also still works: it is read by this server's own logging setup, not by the SDK.
 
+- **The default AWS region is now `us-west-2`** (was `us-east-1`). 0.3.2 moved every
+  documented example to us-west-2 but never changed the fallback in code, so anyone who did
+  not set `AWS_REGION` still landed in us-east-1 — where all four recommended text-to-image
+  tools fail with `The provided model identifier is invalid`. us-west-2 is the only region
+  serving every Bedrock-backed tool here; us-east-1 and us-east-2 are identical strict subsets
+  whose sole addition is Nova Canvas, which retires 2026-09-30. Set `AWS_REGION=us-east-1`
+  explicitly if you still need Nova Canvas.
+
 ### Fixed
+- The region default is now covered by a test (`tests/test_server.py`), which is why the last
+  one drifted from the docs unnoticed. The stale `us-east-1` also remained in the Docker
+  example and both the Cursor and VS Code install deeplinks; all now say us-west-2.
 - The `<3` ceiling is now guarded from both sides. `tests/test_dependency_bounds.py` asserts
   the declared range and the API `server.py` imports cannot drift apart in either direction,
   so the next major SDK bump has to move both together.
