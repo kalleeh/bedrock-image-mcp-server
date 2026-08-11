@@ -5,10 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2026-08-11
+## [0.4.1] - 2026-08-11
 
 Two user-visible fixes flagged as out of scope during the 0.4.0 port to `mcp` 2.0. No tool was
-added, removed, renamed or resignatured, so client configurations need no changes.
+added, removed, renamed or resignatured, and no feature was added, so client configurations need
+no changes.
 
 ### Fixed
 - **A generation that finishes after the client closes stdin is no longer thrown away.** The
@@ -22,13 +23,12 @@ added, removed, renamed or resignatured, so client configurations need no change
   Cursor, VS Code) hold stdin open and were never affected; this fixes piped and one-shot
   invocations.
 
-### Changed
-- **Tool failures no longer emit an MCP log notification.** SEP-2577 deprecated the MCP logging
-  capability, so the 22 `ctx.error()` calls each raised a `MCPDeprecationWarning`. Failures are
-  now reported through the raised exception — which `mcp` still turns into `isError: true` plus
-  the message, verified over the wire — and to this server's stderr log. The only thing lost is
-  the duplicate `notifications/message`, which the protocol is retiring; clients that surface
-  tool errors see no change.
+- **Tool failures no longer emit a deprecated MCP log notification.** SEP-2577 deprecated the
+  MCP logging capability, so the 22 `ctx.error()` calls each raised a `MCPDeprecationWarning`.
+  Failures are now reported through the raised exception — which `mcp` still turns into
+  `isError: true` plus the message, verified over the wire — and to this server's stderr log.
+  The only thing lost is the duplicate `notifications/message`, which the protocol is retiring;
+  clients that surface tool errors see no change.
 
 ## [0.4.0] - 2026-08-10
 
