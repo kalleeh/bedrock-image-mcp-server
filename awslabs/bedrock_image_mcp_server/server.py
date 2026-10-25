@@ -25,30 +25,26 @@ from awslabs.bedrock_image_mcp_server.consts import (
     BEDROCK_MAX_RETRY_ATTEMPTS,
     BEDROCK_READ_TIMEOUT,
     BEDROCK_RETRY_MODE,
-    DEFAULT_CFG_SCALE,
     DEFAULT_CHANGE_STRENGTH,
     DEFAULT_COMPOSITION_FIDELITY,
     DEFAULT_CONTROL_STRENGTH,
     DEFAULT_CREATIVE_UPSCALE_CREATIVITY,
     DEFAULT_GROW_MASK,
-    DEFAULT_HEIGHT,
-    DEFAULT_NUMBER_OF_IMAGES,
     DEFAULT_OUTPAINT_CREATIVITY,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_OUTPUT_FORMAT,
-    DEFAULT_QUALITY,
     DEFAULT_SD35_ASPECT_RATIO,
     DEFAULT_SD35_SEED,
     DEFAULT_STYLE_FIDELITY,
     DEFAULT_STYLE_STRENGTH,
-    DEFAULT_WIDTH,
-    PROMPT_INSTRUCTIONS,
     SD35_PROMPT_INSTRUCTIONS,
     STABILITY_SERVICES_INSTRUCTIONS,
     STDIN_EOF_GRACE_SECONDS,
 )
-from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
-from awslabs.bedrock_image_mcp_server.models.nova_models import McpImageGenerationResponse
+from awslabs.bedrock_image_mcp_server.models.common import (
+    McpImageGenerationResponse,
+    OutputFormat,
+)
 from awslabs.bedrock_image_mcp_server.models.sd35_models import (
     AspectRatio,
     SD35ImageToImageParams,
@@ -77,10 +73,6 @@ from awslabs.bedrock_image_mcp_server.models.stable_image_models import (
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     resolve_output_path,
     sanitize_filename,
-)
-from awslabs.bedrock_image_mcp_server.services.nova_canvas import (
-    generate_image_with_colors,
-    generate_image_with_text,
 )
 from awslabs.bedrock_image_mcp_server.services.sd35_service import (
     generate_image_to_image,
@@ -118,7 +110,7 @@ from botocore.config import Config
 from loguru import logger
 from mcp.server.mcpserver import Context, MCPServer
 from pydantic import Field
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 
 # Logging
@@ -137,9 +129,7 @@ bedrock_runtime_client: BedrockRuntimeClient
 # us-west-2 is the only region where every Bedrock-backed tool in this server works: it is
 # the sole home of SD3.5, Ultra and Core, and it also serves the 13 Stability
 # edit/upscale/control tools. us-east-1 and us-east-2 are strict subsets — identical to each
-# other, and missing all four text-to-image tools. Nova Canvas is the one thing us-west-2 lacks,
-# and it is Legacy with EOL 2026-09-30, so it does not justify a default that breaks the
-# recommended tools.
+# other, and missing all four text-to-image tools.
 aws_region: str = os.environ.get('AWS_REGION', 'us-west-2')
 
 # Configure retry logic following AWS best practices
@@ -196,7 +186,7 @@ async def _track_inflight_requests(ctx, call_next):
     """Count in-flight requests so stdin EOF can wait for them instead of dropping them.
 
     Registered as server middleware, which wraps every inbound request. Doing it here rather
-    than in each tool keeps all 22 tool bodies free of lifecycle bookkeeping.
+    than in each tool keeps all 20 tool bodies free of lifecycle bookkeeping.
     """
     global _inflight_requests
 
@@ -273,7 +263,7 @@ mcp = MCPServer(
     instructions=f"""
 # Amazon Bedrock Image Generation
 
-This MCP server provides tools for generating images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
+This MCP server provides tools for generating images using Stable Diffusion 3.5 Large, Stable Image Ultra and Core, and Stability AI Image Services through Amazon Bedrock.
 
 ## Choosing a text-to-image tool
 
@@ -296,18 +286,12 @@ Stability AI's own "ideal for" guidance, with their credit cost per image:
 
 So: Ultra for a few premium, large-format or print pieces; SD3.5 when you need many good
 assets; Core when speed and cost dominate. Prefer Ultra when the image contains text. All
-three accept prompts up to 10,000 characters and beat Nova Canvas on prompt adherence.
-Use the Nova Canvas tools only for something they cannot do: explicit pixel width/height, a
-color palette, Nova style presets, or several images in one request.
+three accept prompts up to 10,000 characters. To steer colours, name them in the prompt.
 
-Note that AWS has marked Nova Canvas as a Legacy model with end-of-life on 2026-09-30, and
-accounts can lose access to it after 15 days of inactivity. Treat generate_image_sd35 as the
-migration path.
-
-Region availability differs per model family, and no region has all of them. SD3.5, Ultra
-and Core are us-west-2 only; the Stability AI tools are in us-east-1, us-east-2 and us-west-2; Nova
-Canvas is in us-east-1, eu-west-1 and ap-northeast-1. If a tool reports an invalid model
-identifier, the model is not available in the configured AWS_REGION.
+Region availability differs per model family. SD3.5, Ultra and Core are us-west-2 only; the
+Stability AI tools are in us-east-1, us-east-2 and us-west-2, so us-west-2 is the only region
+where every tool works. If a tool reports an invalid model identifier, the model is not
+available in the configured AWS_REGION.
 
 ## Available Tools
 
@@ -316,10 +300,6 @@ identifier, the model is not available in the configured AWS_REGION.
 - **generate_image_sd35**: Balanced text-to-image (Stable Diffusion 3.5 Large). Good general default.
 - **generate_image_core**: Fastest and cheapest text-to-image (Stable Image Core). Best for drafts.
 - **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance. The only image-to-image option of the four.
-
-### Amazon Nova Canvas Tools (DEPRECATED — retires 2026-09-30)
-- **generate_image**: Generate an image from a text prompt using Amazon Nova Canvas. Deprecated; prefer generate_image_sd35 unless you need explicit pixel dimensions, quality/cfg_scale tuning, Nova style presets, or several images per request.
-- **generate_image_with_colors**: Generate an image from a text prompt and color palette using Amazon Nova Canvas. Deprecated; no direct replacement, so describe the colours in a generate_image_sd35 prompt instead.
 
 ### Stability AI Upscale Tools
 All three support png (the default), jpeg and webp. Prefer jpeg or webp for full-size
@@ -347,10 +327,6 @@ small outputs, except in upscale_creative whose output size is fixed.
 - **create_rectangular_mask**: Create a rectangular mask for inpainting or object removal.
 - **create_ellipse_mask**: Create an elliptical mask for inpainting or object removal.
 - **create_full_mask**: Create a full white mask covering the entire image.
-
-## Nova Canvas Prompt Best Practices
-
-{PROMPT_INSTRUCTIONS}
 
 ## Stable Diffusion 3.5 Large Prompt Best Practices
 
@@ -457,239 +433,6 @@ def write_mask(mask_bytes: bytes, filename: Optional[str], workspace_dir: Option
     return mask_path
 
 
-@mcp.tool(name='generate_image')
-async def mcp_generate_image(
-    ctx: Context,
-    prompt: str = Field(
-        description='The text description of the image to generate (1-1024 characters)'
-    ),
-    negative_prompt: Optional[str] = Field(
-        default=None,
-        description='Text to define what not to include in the image (1-1024 characters)',
-    ),
-    filename: Optional[str] = Field(
-        default=None,
-        description='The name of the file to save the image to (without extension)',
-    ),
-    width: int = Field(
-        default=DEFAULT_WIDTH,
-        description='The width of the generated image (320-4096, divisible by 16)',
-    ),
-    height: int = Field(
-        default=DEFAULT_HEIGHT,
-        description='The height of the generated image (320-4096, divisible by 16)',
-    ),
-    quality: str = Field(
-        default=DEFAULT_QUALITY,
-        description='The quality of the generated image ("standard" or "premium")',
-    ),
-    cfg_scale: float = Field(
-        default=DEFAULT_CFG_SCALE,
-        description='How strongly the image adheres to the prompt (1.1-10.0)',
-    ),
-    seed: Optional[int] = Field(default=None, description='Seed for generation (0-858,993,459)'),
-    number_of_images: int = Field(
-        default=DEFAULT_NUMBER_OF_IMAGES,
-        description='The number of images to generate (1-5)',
-    ),
-    style: Optional[str] = Field(
-        default=None,
-        description='Visual style preset: "3D_ANIMATED_FAMILY_FILM", "DESIGN_SKETCH", "FLAT_VECTOR_ILLUSTRATION", "GRAPHIC_NOVEL_ILLUSTRATION", "MAXIMALISM", "MIDCENTURY_RETRO", "PHOTOREALISM", "SOFT_DIGITAL_PAINTING"',
-    ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
-) -> McpImageGenerationResponse:
-    """DEPRECATED. Generate an image using Amazon Nova Canvas with text prompt.
-
-    This tool uses Amazon Nova Canvas to generate images based on a text prompt.
-    The generated image will be saved to a file and the path will be returned.
-
-    DEPRECATED: AWS marked Nova Canvas as a Legacy model and retires it on 2026-09-30, after
-    which this tool will stop working. AWS also revokes access after 15 days of inactivity.
-    Use generate_image_sd35 (Stable Diffusion 3.5 Large, in us-west-2) instead, which also
-    gives noticeably better prompt adherence and image quality. Only use this tool when you
-    specifically need a Nova feature that SD3.5 lacks: explicit width/height in pixels,
-    quality/cfg_scale tuning, Nova style presets, or several images in one request.
-
-    IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
-    The workspace_dir parameter should be set to the directory where the user is currently working
-    so that images are saved to a location accessible to the user.
-
-    ## Prompt Best Practices
-
-    An effective prompt often includes short descriptions of:
-    1. The subject
-    2. The environment
-    3. (optional) The position or pose of the subject
-    4. (optional) Lighting description
-    5. (optional) Camera position/framing
-    6. (optional) The visual style or medium ("photo", "illustration", "painting", etc.)
-
-    Do not use negation words like "no", "not", "without" in your prompt. Instead, use the
-    negative_prompt parameter to specify what you don't want in the image.
-
-    You should always include "people, anatomy, hands, low quality, low resolution, low detail" in your negative_prompt
-
-    ## Example Prompts
-
-    - "realistic editorial photo of female teacher standing at a blackboard with a warm smile"
-    - "whimsical and ethereal soft-shaded story illustration: A woman in a large hat stands at the ship's railing looking out across the ocean"
-    - "drone view of a dark river winding through a stark Iceland landscape, cinematic quality"
-
-    Returns:
-        McpImageGenerationResponse: A response containing the generated image paths.
-    """
-    logger.debug(
-        f"MCP tool generate_image called with prompt: '{prompt[:30]}...', dims: {width}x{height}"
-    )
-
-    try:
-        logger.info(
-            f'Generating image with text prompt, quality: {quality}, cfg_scale: {cfg_scale}'
-        )
-        response = await generate_image_with_text(
-            prompt=prompt,
-            bedrock_runtime_client=bedrock_runtime_client,
-            negative_prompt=negative_prompt,
-            filename=filename,
-            width=width,
-            height=height,
-            quality=quality,
-            cfg_scale=cfg_scale,
-            seed=seed,
-            number_of_images=number_of_images,
-            workspace_dir=workspace_dir,
-            style=style,
-        )
-
-        if response.status == 'success':
-            # return response.paths
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[f'file://{path}' for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate image: {response.message}')
-    except Exception as e:
-        logger.error(f'Error in mcp_generate_image: {str(e)}')
-        raise
-
-
-@mcp.tool(name='generate_image_with_colors')
-async def mcp_generate_image_with_colors(
-    ctx: Context,
-    prompt: str = Field(
-        description='The text description of the image to generate (1-1024 characters)'
-    ),
-    colors: List[str] = Field(
-        description='List of up to 10 hexadecimal color values (e.g., "#FF9800")'
-    ),
-    negative_prompt: Optional[str] = Field(
-        default=None,
-        description='Text to define what not to include in the image (1-1024 characters)',
-    ),
-    filename: Optional[str] = Field(
-        default=None,
-        description='The name of the file to save the image to (without extension)',
-    ),
-    width: int = Field(
-        default=1024,
-        description='The width of the generated image (320-4096, divisible by 16)',
-    ),
-    height: int = Field(
-        default=1024,
-        description='The height of the generated image (320-4096, divisible by 16)',
-    ),
-    quality: str = Field(
-        default='standard',
-        description='The quality of the generated image ("standard" or "premium")',
-    ),
-    cfg_scale: float = Field(
-        default=6.5,
-        description='How strongly the image adheres to the prompt (1.1-10.0)',
-    ),
-    seed: Optional[int] = Field(default=None, description='Seed for generation (0-858,993,459)'),
-    number_of_images: int = Field(default=1, description='The number of images to generate (1-5)'),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="The current workspace directory where the image should be saved. CRITICAL: Assistant must always provide this parameter to save images to the user's current project.",
-    ),
-) -> McpImageGenerationResponse:
-    """DEPRECATED. Generate an image using Amazon Nova Canvas with color guidance.
-
-    This tool uses Amazon Nova Canvas to generate images based on a text prompt and color palette.
-    The generated image will be saved to a file and the path will be returned.
-
-    DEPRECATED: AWS marked Nova Canvas as a Legacy model and retires it on 2026-09-30, after
-    which this tool will stop working. There is no direct replacement for colour-palette
-    guidance; describe the desired colours in the prompt to generate_image_sd35 instead.
-
-    IMPORTANT FOR Assistant: Always send the current workspace directory when calling this tool!
-    The workspace_dir parameter should be set to the directory where the user is currently working
-    so that images are saved to a location accessible to the user.
-
-    ## Prompt Best Practices
-
-    An effective prompt often includes short descriptions of:
-    1. The subject
-    2. The environment
-    3. (optional) The position or pose of the subject
-    4. (optional) Lighting description
-    5. (optional) Camera position/framing
-    6. (optional) The visual style or medium ("photo", "illustration", "painting", etc.)
-
-    Do not use negation words like "no", "not", "without" in your prompt. Instead, use the
-    negative_prompt parameter to specify what you don't want in the image.
-
-    ## Example Colors
-
-    - ["#FF5733", "#33FF57", "#3357FF"] - A vibrant color scheme with red, green, and blue
-    - ["#000000", "#FFFFFF"] - A high contrast black and white scheme
-    - ["#FFD700", "#B87333"] - A gold and bronze color scheme
-
-    Returns:
-        McpImageGenerationResponse: A response containing the generated image paths.
-    """
-    logger.debug(
-        f"MCP tool generate_image_with_colors called with prompt: '{prompt[:30]}...', {len(colors)} colors"
-    )
-
-    try:
-        color_hex_list = ', '.join(colors[:3]) + (', ...' if len(colors) > 3 else '')
-        logger.info(
-            f'Generating color-guided image with colors: [{color_hex_list}], quality: {quality}'
-        )
-
-        response = await generate_image_with_colors(
-            prompt=prompt,
-            colors=colors,
-            bedrock_runtime_client=bedrock_runtime_client,
-            negative_prompt=negative_prompt,
-            filename=filename,
-            width=width,
-            height=height,
-            quality=quality,
-            cfg_scale=cfg_scale,
-            seed=seed,
-            number_of_images=number_of_images,
-            workspace_dir=workspace_dir,
-        )
-
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[f'file://{path}' for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate color-guided image: {response.message}')
-    except Exception as e:
-        logger.error(f'Error in mcp_generate_image_with_colors: {str(e)}')
-        raise
-
-
 @mcp.tool(name='generate_image_sd35')
 async def mcp_generate_image_sd35(
     ctx: Context,
@@ -753,16 +496,13 @@ async def mcp_generate_image_sd35(
     many good assets; Core when speed and cost dominate. Stability credits only Ultra with
     typography, so prefer it when the image contains text.
 
-    Reach for generate_image (Nova Canvas) only when you need explicit pixel dimensions,
-    a color palette, Nova style presets, or several images in one request.
-
     IMPORTANT FOR ASSISTANT: Always send the current workspace directory when calling this tool!
     The workspace_dir parameter should be set to the directory where the user is currently working
     so that images are saved to a location accessible to the user.
 
     ## Key Features
 
-    - Supports prompts up to 10,000 characters (vs 1,024 for Nova Canvas)
+    - Supports prompts up to 10,000 characters
     - Better prompt adherence and detail preservation
     - Aspect ratio selection instead of explicit dimensions
     - Reproducible results with seed values

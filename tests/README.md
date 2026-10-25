@@ -1,16 +1,14 @@
 # Bedrock Image MCP Server Tests
 
 This directory contains tests for the Bedrock Image MCP Server, which provides tools for
-generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and
+generating and editing images using Stable Diffusion 3.5 Large, Stable Image Ultra and Core, and
 Stability AI Image Services through Amazon Bedrock.
 
 ## Test Structure
 
 - `conftest.py`: pytest fixtures shared across the suite
-- `test_models.py`: Nova Canvas request/response models
 - `test_sd35_models.py`: SD3.5 parameter models and validators
 - `test_bedrock_common.py`: shared Bedrock invocation, error classification, and image saving
-- `test_novacanvas.py`: Nova Canvas service functions
 - `test_sd35_service.py`: SD3.5 service functions
 - `test_stability_upscale.py`: upscale service functions
 - `test_stability_edit.py`: inpaint, outpaint, search/replace, recolor, and removal services

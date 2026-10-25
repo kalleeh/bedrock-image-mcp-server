@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **The Nova Canvas tools `generate_image` and `generate_image_with_colors`.** AWS retired
+  Amazon Nova Canvas on 2026-09-30, and every request to it now fails with
+  `ResourceNotFoundException: This model version has reached the end of its life`, so the two
+  tools could no longer do anything but error. The server now registers 20 tools. Use
+  `generate_image_sd35`, `generate_image_ultra` or `generate_image_core` (us-west-2) instead.
+  They have no colour-palette parameter, so name the colours in the prompt, and they return
+  one image per call, so call them again for more. The Nova request models, service module,
+  constants, prompt guide and Legacy-error guidance were removed with them.
+
 ### Fixed
 - **The package no longer lists Amazon Web Services as an author.** PyPI showed "Amazon Web
   Services" in the author field, which implied an official AWS package. This is a community

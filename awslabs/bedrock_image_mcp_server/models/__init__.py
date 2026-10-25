@@ -13,38 +13,17 @@
 # limitations under the License.
 """Models package for Bedrock image generation services."""
 
-# Export Nova Canvas models for backward compatibility
-from awslabs.bedrock_image_mcp_server.models.nova_models import (
-    ColorGuidedGenerationParams,
-    ColorGuidedRequest,
-    ImageGenerationConfig,
-    ImageGenerationResponse,
-    McpImageGenerationResponse,
-    Quality,
-    TaskType,
-    TextImageRequest,
-    TextToImageParams,
-)
-
-# Export common models
 from awslabs.bedrock_image_mcp_server.models.common import (
     BedrockModelId,
+    ImageGenerationResponse,
+    McpImageGenerationResponse,
     OutputFormat,
 )
 
 
 __all__ = [
-    # Nova Canvas models
-    'Quality',
-    'TaskType',
-    'ImageGenerationConfig',
-    'TextToImageParams',
-    'ColorGuidedGenerationParams',
-    'TextImageRequest',
-    'ColorGuidedRequest',
-    'McpImageGenerationResponse',
-    'ImageGenerationResponse',
-    # Common models
-    'OutputFormat',
     'BedrockModelId',
+    'ImageGenerationResponse',
+    'McpImageGenerationResponse',
+    'OutputFormat',
 ]
