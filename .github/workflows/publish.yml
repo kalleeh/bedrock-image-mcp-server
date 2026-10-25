@@ -26,7 +26,7 @@ jobs:
         # its tag.
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          project=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          project=$(sed -n '/^\[project\]/,/^\[/p' pyproject.toml | grep -m1 '^version = ' | cut -d'"' -f2)
           commitizen=$(sed -n '/^\[tool.commitizen\]/,/^\[/p' pyproject.toml | grep -m1 '^version = ' | cut -d'"' -f2)
           module=$(grep -m1 '^__version__ = ' awslabs/bedrock_image_mcp_server/__init__.py | cut -d"'" -f2)
           echo "tag=$tag project=$project commitizen=$commitizen module=$module"

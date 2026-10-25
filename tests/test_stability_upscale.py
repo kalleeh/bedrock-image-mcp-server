@@ -271,15 +271,21 @@ class TestImageValidation:
         'upscale, params_cls, size',
         [
             (upscale_creative, CreativeUpscaleParams, (1024, 1024)),
+            (upscale_fast, FastUpscaleParams, (1024, 1024)),
             (upscale_conservative, ConservativeUpscaleParams, (3072, 3072)),
         ],
-        ids=['creative-1MP', 'conservative-9.4MP'],
+        ids=['creative-1MP', 'fast-1MP', 'conservative-9.4MP'],
     )
     async def test_input_at_pixel_cap_is_accepted(
         self, upscale, params_cls, size, mock_bedrock_runtime_client
     ):
         """Test an image exactly at the cap still goes through."""
-        params = params_cls(image=create_test_image_base64(*size), prompt='p')
+        image = create_test_image_base64(*size)
+        params = (
+            params_cls(image=image)
+            if params_cls is FastUpscaleParams
+            else params_cls(image=image, prompt='p')
+        )
 
         with (
             patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke,
