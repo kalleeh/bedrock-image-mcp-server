@@ -22,12 +22,13 @@ from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     BedrockAPIError,
     ContentFilterError,
     invoke_bedrock_model,
+    resolve_image_input,
     resolve_output_path,
     sanitize_filename,
     save_images,
 )
 from botocore.exceptions import ClientError
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 MODEL_ID = 'us.stability.stable-image-core-v1:1'
@@ -162,6 +163,9 @@ class TestClientErrorClassification:
             ('ModelNotReadyException', True),
             ('ServiceUnavailableException', True),
             ('InternalServerException', True),
+            ('ModelTimeoutException', True),
+            ('ModelErrorException', False),
+            ('ServiceQuotaExceededException', False),
         ],
     )
     async def test_known_error_codes_are_classified(self, error_code, retryable):
@@ -181,6 +185,28 @@ class TestClientErrorClassification:
         # A ClientError must not be downgraded to the generic catch-all classification.
         assert error.error_code != 'UnexpectedError'
         assert not isinstance(error, ContentFilterError)
+        # Every documented InvokeModel error gets its own message, not the catch-all.
+        assert not error.message.startswith('API call failed')
+
+    @pytest.mark.parametrize(
+        'error_code',
+        ['ThrottlingException', 'ServiceUnavailableException', 'InternalServerException'],
+    )
+    async def test_retryable_errors_do_not_promise_a_retry(self, error_code):
+        """Test the message admits the SDK retries already ran, rather than promising more.
+
+        These errors only reach the caller after botocore has used up its retry budget.
+        """
+        client = _client_raising(_client_error(error_code))
+
+        with pytest.raises(BedrockAPIError) as exc_info:
+            await invoke_bedrock_model(
+                model_id=MODEL_ID, request_body={'prompt': 'a cat'}, bedrock_client=client
+            )
+
+        message = exc_info.value.message
+        assert 'will automatically retry' not in message
+        assert 'exhausted' in message
 
     async def test_validation_exception_surfaces_aws_message(self):
         """Test the AWS-provided message is included for validation failures."""
@@ -450,3 +476,66 @@ class TestModelNotFoundGuidance:
         message = exc_info.value.message
         assert 'AWS_REGION' in message
         assert 'us-west-2' in message
+
+
+class TestConcurrentSaves:
+    """Tests for saves racing to create the same fresh output directory."""
+
+    def test_directory_created_by_a_concurrent_save_is_tolerated(self, tmp_path):
+        """Test a save survives another save creating the output dir after it checked.
+
+        Checking for the directory and then creating it let a second save create it in
+        between, so the loser raised and dropped an image Bedrock had already billed for.
+        The patched exists() replays that losing interleaving deterministically.
+        """
+        (tmp_path / 'output').mkdir()
+        image_b64 = base64.b64encode(b'image-bytes').decode('utf-8')
+
+        with patch(
+            'awslabs.bedrock_image_mcp_server.services.bedrock_common.os.path.exists',
+            return_value=False,
+        ):
+            paths = save_images(
+                base64_images=[image_b64],
+                workspace_dir=str(tmp_path),
+                filename_prefix='img',
+                output_format=OutputFormat.PNG,
+            )
+
+        assert len(paths) == 1
+        assert os.path.exists(paths[0])
+
+
+class TestResolveImageInput:
+    """Tests for turning a path-or-base64 input into base64 data."""
+
+    def test_home_relative_path_is_expanded(self, tmp_path, monkeypatch):
+        """Test a ~/ path is read from the home directory instead of treated as base64."""
+        monkeypatch.setenv('HOME', str(tmp_path))
+        (tmp_path / 'input.png').write_bytes(b'png-bytes')
+
+        assert resolve_image_input('~/input.png') == base64.b64encode(b'png-bytes').decode()
+
+    def test_oversized_file_is_rejected_without_reading_it(self, tmp_path):
+        """Test a file too large for a Bedrock request is refused before it is loaded."""
+        path = tmp_path / 'huge.png'
+        path.write_bytes(b'x' * 101)
+
+        with patch(
+            'awslabs.bedrock_image_mcp_server.utils.image_utils.MAX_INPUT_IMAGE_BYTES', 100
+        ):
+            with patch('builtins.open') as mock_open:
+                with pytest.raises(ValueError, match='exceeding the maximum 100 bytes'):
+                    resolve_image_input(str(path))
+
+        mock_open.assert_not_called()
+
+    def test_file_at_the_limit_is_accepted(self, tmp_path):
+        """Test the cap is inclusive."""
+        path = tmp_path / 'edge.png'
+        path.write_bytes(b'x' * 100)
+
+        with patch(
+            'awslabs.bedrock_image_mcp_server.utils.image_utils.MAX_INPUT_IMAGE_BYTES', 100
+        ):
+            assert resolve_image_input(str(path)) == base64.b64encode(b'x' * 100).decode()

@@ -143,6 +143,58 @@ class TestEllipseMask:
             )
 
 
+class TestMaskGeometry:
+    """Tests for exact mask extents and feather limits."""
+
+    def test_ellipse_spans_exactly_twice_its_radius(self):
+        """Test an ellipse touching the image edge is 2 * radius pixels wide, not clipped.
+
+        PIL's bounding box is inclusive, so passing center + radius drew one pixel too many
+        and cut the ellipse off at the right and bottom edges.
+        """
+        mask = Image.open(
+            BytesIO(
+                create_ellipse_mask(100, 60, center_x=50, center_y=30, radius_x=50, radius_y=30)
+            )
+        )
+
+        assert mask.getbbox() == (0, 0, 100, 60)
+        assert mask.getpixel((0, 30)) == 255
+        assert mask.getpixel((99, 30)) == 255
+
+    def test_ellipse_inside_the_image_has_exact_extent(self):
+        """Test a 2r x 2r ellipse occupies exactly that box."""
+        mask = Image.open(
+            BytesIO(
+                create_ellipse_mask(100, 100, center_x=50, center_y=50, radius_x=10, radius_y=5)
+            )
+        )
+
+        assert mask.getbbox() == (40, 45, 60, 55)
+
+    def test_rectangle_has_exact_extent(self):
+        """Test the rectangle covers exactly mask_width x mask_height pixels."""
+        mask = Image.open(
+            BytesIO(create_rectangular_mask(100, 100, x=10, y=20, mask_width=30, mask_height=40))
+        )
+
+        assert mask.getbbox() == (10, 20, 40, 60)
+
+    @pytest.mark.parametrize('feather', [-1, 51])
+    def test_feather_outside_documented_range_is_rejected(self, feather):
+        """Test feather is limited to the documented 0-50."""
+        with pytest.raises(ValueError, match='Feather must be between 0 and 50'):
+            create_rectangular_mask(100, 100, 0, 0, 10, 10, feather=feather)
+        with pytest.raises(ValueError, match='Feather must be between 0 and 50'):
+            create_ellipse_mask(100, 100, 50, 50, 10, 10, feather=feather)
+
+    def test_feather_at_the_limits_is_accepted(self):
+        """Test 0 and 50 are both valid."""
+        for feather in (0, 50):
+            create_rectangular_mask(100, 100, 0, 0, 10, 10, feather=feather)
+            create_ellipse_mask(100, 100, 50, 50, 10, 10, feather=feather)
+
+
 class TestFullMask:
     """Tests for full mask creation."""
 

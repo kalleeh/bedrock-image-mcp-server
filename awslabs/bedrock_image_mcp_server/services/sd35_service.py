@@ -17,9 +17,6 @@ This module provides functions for text-to-image and image-to-image generation
 using Stable Diffusion 3.5 Large through AWS Bedrock.
 """
 
-import asyncio
-import base64
-import os
 from awslabs.bedrock_image_mcp_server.consts import SD35_LARGE_MODEL_ID
 from awslabs.bedrock_image_mcp_server.models.common import ImageGenerationResponse
 from awslabs.bedrock_image_mcp_server.models.sd35_models import (
@@ -28,7 +25,9 @@ from awslabs.bedrock_image_mcp_server.models.sd35_models import (
     SD35TextToImageParams,
 )
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
+    finalize_image_response,
     invoke_bedrock_model,
+    prepare_image,
     save_images,
 )
 from loguru import logger
@@ -126,48 +125,23 @@ async def generate_text_to_image(
             model_id=SD35_LARGE_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
         )
 
-        # Extract images from response
-        base64_images = result.get('images', [])
-        if not base64_images:
-            raise ValueError('No images returned from Bedrock API')
-
-        # Determine filename prefix
-        if filename:
-            filename_prefix = filename
-        else:
-            filename_prefix = 'sd35'
-
-        # Save images
-        saved_paths = await asyncio.to_thread(
-            save_images,
-            base64_images=base64_images,
-            workspace_dir=workspace_dir,
-            filename_prefix=filename_prefix,
-            output_format=params.output_format,
-        )
-
-        # Build response
-        response = ImageGenerationResponse(
-            status='success',
-            message=f'Successfully generated {len(saved_paths)} image(s) using SD3.5',
-            paths=saved_paths,
+        return await finalize_image_response(
+            result=result,
             model_id=SD35_LARGE_MODEL_ID,
+            operation='SD3.5 text-to-image',
+            saver=save_images,
+            default_prefix='sd35',
+            filename=filename,
+            workspace_dir=workspace_dir,
+            output_format=params.output_format,
+            success_message='Successfully generated image using SD3.5',
             prompt=params.prompt,
             seed=params.seed,
             metadata={
                 'aspect_ratio': params.aspect_ratio.value,
                 'mode': GenerationMode.TEXT_TO_IMAGE.value,
-                'finish_reasons': result.get('finish_reasons', []),
             },
         )
-
-        logger.bind(
-            model='sd3.5-large',
-            images_count=len(saved_paths),
-            aspect_ratio=params.aspect_ratio.value,
-            output_dir=workspace_dir or 'current_directory',
-        ).info(f'SD3.5 text-to-image generation successful: {len(saved_paths)} image(s)')
-        return response
 
     except Exception as e:
         logger.bind(
@@ -217,67 +191,32 @@ async def generate_image_to_image(
     ).info(f'Generating SD3.5 image-to-image with strength: {params.strength}')
 
     try:
-        # Handle file path input - convert to base64 if needed
-        image_data = params.image
-        if os.path.exists(params.image):
-            logger.debug(f'Loading image from file: {params.image}')
-            with open(params.image, 'rb') as f:
-                image_bytes = f.read()
-                image_data = base64.b64encode(image_bytes).decode('utf-8')
+        # Resolve a file path to base64 and validate it off the event loop. A copy carries the
+        # encoded image so the caller's params are left as they passed them.
+        image_base64, _, _ = await prepare_image(params.image)
+        request_body = build_sd35_request(params.model_copy(update={'image': image_base64}))
 
-            # Update params with base64 data for validation
-            params.image = image_data
-
-        # Build request body
-        request_body = build_sd35_request(params)
-
-        # Invoke Bedrock model
         result = await invoke_bedrock_model(
             model_id=SD35_LARGE_MODEL_ID, request_body=request_body, bedrock_client=bedrock_client
         )
 
-        # Extract images from response
-        base64_images = result.get('images', [])
-        if not base64_images:
-            raise ValueError('No images returned from Bedrock API')
-
-        # Determine filename prefix
-        if filename:
-            filename_prefix = filename
-        else:
-            filename_prefix = 'sd35_transform'
-
-        # Save images
-        saved_paths = await asyncio.to_thread(
-            save_images,
-            base64_images=base64_images,
-            workspace_dir=workspace_dir,
-            filename_prefix=filename_prefix,
-            output_format=params.output_format,
-        )
-
-        # Build response
-        response = ImageGenerationResponse(
-            status='success',
-            message='Successfully transformed image using SD3.5',
-            paths=saved_paths,
+        return await finalize_image_response(
+            result=result,
             model_id=SD35_LARGE_MODEL_ID,
+            operation='SD3.5 image-to-image',
+            saver=save_images,
+            default_prefix='sd35_transform',
+            filename=filename,
+            workspace_dir=workspace_dir,
+            output_format=params.output_format,
+            success_message='Successfully transformed image using SD3.5',
             prompt=params.prompt,
             seed=params.seed,
             metadata={
                 'strength': params.strength,
                 'mode': GenerationMode.IMAGE_TO_IMAGE.value,
-                'finish_reasons': result.get('finish_reasons', []),
             },
         )
-
-        logger.bind(
-            model='sd3.5-large',
-            mode='image-to-image',
-            images_count=len(saved_paths),
-            strength=params.strength,
-        ).info(f'SD3.5 image-to-image transformation successful: {len(saved_paths)} image(s)')
-        return response
 
     except Exception as e:
         logger.bind(

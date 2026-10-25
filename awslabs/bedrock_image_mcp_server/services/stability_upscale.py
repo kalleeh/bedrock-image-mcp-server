@@ -18,10 +18,12 @@ that can upscale images to 4K resolution with various enhancement options.
 """
 
 from awslabs.bedrock_image_mcp_server.consts import (
+    MAX_CONSERVATIVE_UPSCALE_ASPECT_RATIO,
     MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS,
     MAX_CREATIVE_UPSCALE_INPUT_PIXELS,
+    MAX_FAST_UPSCALE_DIMENSION,
     MAX_FAST_UPSCALE_INPUT_PIXELS,
-    MIN_FAST_UPSCALE_INPUT_PIXELS,
+    MIN_FAST_UPSCALE_DIMENSION,
     STABLE_UPSCALE_CONSERVATIVE_MODEL_ID,
     STABLE_UPSCALE_CREATIVE_MODEL_ID,
     STABLE_UPSCALE_FAST_MODEL_ID,
@@ -167,6 +169,13 @@ async def upscale_conservative(
 
     logger.info(f'Input image dimensions: {width}x{height} ({width * height} pixels)')
 
+    aspect_ratio = max(width, height) / min(width, height)
+    if aspect_ratio > MAX_CONSERVATIVE_UPSCALE_ASPECT_RATIO:
+        raise ValueError(
+            f'Image aspect ratio {width}x{height} is outside the 1:2.5 to 2.5:1 range '
+            'supported by conservative upscale'
+        )
+
     request_body: Dict[str, Any] = {
         'image': image_base64,
         'prompt': params.prompt,
@@ -234,16 +243,17 @@ async def upscale_fast(
     logger.info('Starting fast upscale')
 
     image_base64, width, height = await prepare_image(
-        params.image, max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS
+        params.image,
+        min_dimension=MIN_FAST_UPSCALE_DIMENSION,
+        max_pixels=MAX_FAST_UPSCALE_INPUT_PIXELS,
     )
 
-    total_pixels = width * height
-    logger.info(f'Input image dimensions: {width}x{height} ({total_pixels} pixels)')
+    logger.info(f'Input image dimensions: {width}x{height} ({width * height} pixels)')
 
-    if total_pixels < MIN_FAST_UPSCALE_INPUT_PIXELS:
+    if max(width, height) > MAX_FAST_UPSCALE_DIMENSION:
         raise ValueError(
-            f'Image has {total_pixels} pixels, below minimum {MIN_FAST_UPSCALE_INPUT_PIXELS} '
-            'pixels for fast upscale'
+            f'Image {width}x{height} exceeds the {MAX_FAST_UPSCALE_DIMENSION}px per-side '
+            'maximum for fast upscale'
         )
 
     request_body: Dict[str, Any] = {

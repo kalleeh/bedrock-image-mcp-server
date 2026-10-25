@@ -17,7 +17,6 @@ This module provides image editing services including inpainting, outpainting,
 search and replace, search and recolor, object removal, and background removal.
 """
 
-import io
 from awslabs.bedrock_image_mcp_server.consts import (
     STABLE_ERASE_OBJECT_MODEL_ID,
     STABLE_INPAINT_MODEL_ID,
@@ -38,14 +37,10 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     finalize_image_response,
     invoke_bedrock_model,
-    measure_image,
     prepare_image,
-    resolve_image_input,
     save_images,
 )
-from awslabs.bedrock_image_mcp_server.utils.image_utils import decode_base64_image
 from loguru import logger
-from PIL import Image
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 
@@ -53,38 +48,6 @@ if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
 else:
     BedrockRuntimeClient = object
-
-
-def _validate_mask(mask_base64: str, image_base64: str) -> None:
-    """Validate mask format and dimensions match image.
-
-    Args:
-        mask_base64: Base64-encoded mask image.
-        image_base64: Base64-encoded input image.
-
-    Raises:
-        ValueError: If mask is invalid or dimensions don't match.
-    """
-    # Decode both images
-    mask_bytes = decode_base64_image(mask_base64)
-    image_bytes = decode_base64_image(image_base64)
-
-    # Open images with PIL
-    with Image.open(io.BytesIO(mask_bytes)) as mask_img:
-        with Image.open(io.BytesIO(image_bytes)) as input_img:
-            mask_size = mask_img.size
-            input_size = input_img.size
-            mask_mode = mask_img.mode
-
-    # Check dimensions match
-    if mask_size != input_size:
-        raise ValueError(f'Mask dimensions {mask_size} do not match image dimensions {input_size}')
-
-    # Check mask is grayscale or can be converted
-    if mask_mode not in ('L', 'LA', 'RGB', 'RGBA'):
-        raise ValueError(f'Invalid mask format: {mask_mode}. Must be grayscale or RGB.')
-
-    logger.debug(f'Mask validation passed: {mask_size}, mode={mask_mode}')
 
 
 async def inpaint(
@@ -116,17 +79,15 @@ async def inpaint(
         ImageGenerationResponse with status, message, and file paths.
 
     Raises:
-        ValueError: If mask is invalid or dimensions don't match.
+        ValueError: If the image or mask is invalid.
         BedrockAPIError: If API call fails.
     """
     logger.info('Starting inpaint')
 
-    image_base64 = resolve_image_input(params.image)
-    mask_base64 = resolve_image_input(params.mask, 'mask')
-
-    _validate_mask(mask_base64, image_base64)
-
-    width, height = measure_image(image_base64)
+    image_base64, width, height = await prepare_image(params.image)
+    # Bedrock resizes a mask that differs from the image and converts it to greyscale, so
+    # the mask only has to be a decodable image.
+    mask_base64, _, _ = await prepare_image(params.mask, label='mask', min_dimension=1)
 
     logger.info(f'Input image dimensions: {width}x{height}')
 
@@ -422,17 +383,15 @@ async def remove_object(
         ImageGenerationResponse with status, message, and file paths.
 
     Raises:
-        ValueError: If mask is invalid or dimensions don't match.
+        ValueError: If the image or mask is invalid.
         BedrockAPIError: If API call fails.
     """
     logger.info('Starting remove object')
 
-    image_base64 = resolve_image_input(params.image)
-    mask_base64 = resolve_image_input(params.mask, 'mask')
-
-    _validate_mask(mask_base64, image_base64)
-
-    width, height = measure_image(image_base64)
+    image_base64, width, height = await prepare_image(params.image)
+    # Bedrock resizes a mask that differs from the image and converts it to greyscale, so
+    # the mask only has to be a decodable image.
+    mask_base64, _, _ = await prepare_image(params.mask, label='mask', min_dimension=1)
 
     logger.info(f'Input image dimensions: {width}x{height}')
 

@@ -451,6 +451,22 @@ class TestSharedToolContract:
         assert logged_errors == []
 
     @pytest.mark.parametrize('tool_name', SERVICE_TOOLS)
+    async def test_paths_with_reserved_characters_are_percent_encoded(
+        self, tool_name, mock_context
+    ):
+        """Test a space, '#' or '?' in a saved path still yields a valid file URI.
+
+        Pasting the raw path after file:// truncates the URI at '#' or '?', so clients
+        cannot open the image.
+        """
+        tool, service, _ = TOOL_KWARGS[tool_name]
+        with patch(f'{SERVER_MODULE}.{service}') as mock_service:
+            mock_service.return_value = success_response(['/tmp/my image #1?.png'])
+            result = await tool(ctx=mock_context, **call_kwargs(tool_name))
+
+        assert result.paths == ['file:///tmp/my%20image%20%231%3F.png']
+
+    @pytest.mark.parametrize('tool_name', SERVICE_TOOLS)
     async def test_service_error_reports_exactly_once(
         self, tool_name, mock_context, logged_errors
     ):
@@ -537,23 +553,24 @@ class TestSD35Tools:
         assert params.prompt == 'make it a watercolor'
         assert params.seed == 7
 
-    async def test_transform_image_sd35_rejects_undersized_image(
-        self, mock_context, logged_errors
-    ):
-        """Test that an image below the 64px minimum is rejected before the service call."""
-        tiny_image = create_test_image_base64(32, 32)
-        with patch(f'{SERVER_MODULE}.generate_image_to_image') as mock_service:
-            with pytest.raises(Exception, match='32x32'):
-                await mcp_transform_image_sd35(
-                    ctx=mock_context, **call_kwargs('transform_image_sd35', image=tiny_image)
-                )
-
-        mock_service.assert_not_called()
-        assert len(logged_errors) == 1
-
 
 class TestUpscaleTools:
     """Tests for the Stability AI upscale tools."""
+
+    async def test_upscale_creative_defaults_to_jpeg(self):
+        """Test the advertised default is jpeg, since its fixed-size PNG output never fits.
+
+        Read from the published schema: calling the tool function directly skips the Field
+        defaults that clients actually get.
+        """
+        from awslabs.bedrock_image_mcp_server.server import mcp
+
+        tools = {tool.name: tool for tool in await mcp.list_tools()}
+        schema = tools['upscale_creative'].input_schema['properties']['output_format']
+        assert schema['default'] == 'jpeg'
+        assert (
+            tools['upscale_fast'].input_schema['properties']['output_format']['default'] == 'png'
+        )
 
     async def test_upscale_creative_forwards_creativity_and_style_preset(self, mock_context):
         """Test that upscale_creative forwards creativity and converts the style preset."""

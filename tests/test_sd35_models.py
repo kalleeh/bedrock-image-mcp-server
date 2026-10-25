@@ -222,15 +222,6 @@ class TestSD35ImageToImageParams:
         errors = exc_info.value.errors()
         assert any('less than or equal to 1' in str(error).lower() for error in errors)
 
-    def test_image_dimension_validation_minimum(self, small_base64_image):
-        """Test that images below 64px per side are rejected."""
-        with pytest.raises(ValidationError) as exc_info:
-            SD35ImageToImageParams(prompt='test', image=small_base64_image, strength=0.7)
-
-        # Verify the error is about image dimensions
-        errors = exc_info.value.errors()
-        assert any('dimensions' in str(error).lower() and '64' in str(error) for error in errors)
-
     def test_image_dimension_validation_valid(self, valid_base64_image):
         """Test that images at or above 64px per side are accepted."""
         # Create a 64x64 image (minimum valid size)
@@ -242,15 +233,6 @@ class TestSD35ImageToImageParams:
 
         params = SD35ImageToImageParams(prompt='test', image=min_size_image, strength=0.7)
         assert params.image == min_size_image
-
-    def test_invalid_base64_image(self):
-        """Test that invalid base64 data is rejected."""
-        with pytest.raises(ValidationError) as exc_info:
-            SD35ImageToImageParams(prompt='test', image='not-valid-base64!!!', strength=0.7)
-
-        # Verify the error is about invalid image data
-        errors = exc_info.value.errors()
-        assert any('invalid image data' in str(error).lower() for error in errors)
 
     def test_seed_bounds(self, valid_base64_image):
         """Test that seed validation works for image-to-image."""

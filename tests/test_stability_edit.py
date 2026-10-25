@@ -34,7 +34,6 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
     SearchReplaceParams,
 )
 from awslabs.bedrock_image_mcp_server.services.stability_edit import (
-    _validate_mask,
     inpaint,
     outpaint,
     remove_background,
@@ -43,7 +42,15 @@ from awslabs.bedrock_image_mcp_server.services.stability_edit import (
     search_and_replace,
 )
 from PIL import Image
+from pydantic import ValidationError
 from unittest.mock import patch
+
+
+def _encode_png(img: Image.Image) -> str:
+    """Encode a PIL image as base64 PNG data."""
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
 
 @pytest.fixture
@@ -77,32 +84,6 @@ def sample_mismatched_mask_base64() -> str:
     img.save(buffer, format='PNG')
     buffer.seek(0)
     return base64.b64encode(buffer.read()).decode('utf-8')
-
-
-class TestValidateMask:
-    """Tests for the _validate_mask function."""
-
-    def test_valid_mask(self, sample_image_base64, sample_mask_base64):
-        """Test validation passes with matching dimensions."""
-        # Should not raise any exception
-        _validate_mask(sample_mask_base64, sample_image_base64)
-
-    def test_mismatched_dimensions(self, sample_image_base64, sample_mismatched_mask_base64):
-        """Test validation fails with mismatched dimensions."""
-        with pytest.raises(ValueError, match='Mask dimensions .* do not match image dimensions'):
-            _validate_mask(sample_mismatched_mask_base64, sample_image_base64)
-
-    def test_rgb_mask_accepted(self, sample_image_base64):
-        """Test that RGB masks are accepted (can be converted to grayscale)."""
-        # Create an RGB mask
-        img = Image.new('RGB', (256, 256), color=(128, 128, 128))
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        buffer.seek(0)
-        rgb_mask = base64.b64encode(buffer.read()).decode('utf-8')
-
-        # Should not raise any exception
-        _validate_mask(rgb_mask, sample_image_base64)
 
 
 class TestInpaint:
@@ -165,25 +146,48 @@ class TestInpaint:
         mock_save_images.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_inpaint_mask_validation_failure(
+    @pytest.mark.parametrize('mask_mode', ['L', '1', 'P', 'RGB'])
+    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.invoke_bedrock_model')
+    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.save_images')
+    async def test_inpaint_sends_any_decodable_mask(
         self,
+        mock_save_images,
+        mock_invoke_bedrock,
+        mask_mode,
         mock_bedrock_runtime_client,
         sample_image_base64,
-        sample_mismatched_mask_base64,
     ):
-        """Test inpaint fails with mismatched mask dimensions."""
+        """Test a smaller mask in any PIL mode reaches Bedrock, which resizes and converts it.
+
+        Bedrock documents that a mask of a different size than the image is resized
+        automatically, and it places no restriction on the mask's colour mode.
+        """
+        mock_invoke_bedrock.return_value = {'images': ['base64_inpainted_image']}
+        mock_save_images.return_value = ['/path/to/inpainted.png']
+        mask = _encode_png(Image.new(mask_mode, (128, 128)))
+
+        params = InpaintParams(image=sample_image_base64, mask=mask, prompt='fill with flowers')
+        result = await inpaint(params=params, bedrock_client=mock_bedrock_runtime_client)
+
+        assert result.status == 'success'
+        assert mock_invoke_bedrock.call_args[1]['request_body']['mask'] == mask
+
+    @pytest.mark.asyncio
+    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.invoke_bedrock_model')
+    async def test_inpaint_rejects_undecodable_mask(
+        self, mock_invoke_bedrock, mock_bedrock_runtime_client, sample_image_base64
+    ):
+        """Test a mask that is not image data fails before any Bedrock call."""
         params = InpaintParams(
             image=sample_image_base64,
-            mask=sample_mismatched_mask_base64,
+            mask=base64.b64encode(b'not an image').decode('utf-8'),
             prompt='fill with flowers',
         )
 
-        # Should raise ValueError for dimension mismatch
-        with pytest.raises(ValueError, match='Mask dimensions .* do not match'):
-            await inpaint(
-                params=params,
-                bedrock_client=mock_bedrock_runtime_client,
-            )
+        with pytest.raises((ValueError, IOError)):
+            await inpaint(params=params, bedrock_client=mock_bedrock_runtime_client)
+
+        mock_invoke_bedrock.assert_not_called()
 
     @pytest.mark.asyncio
     @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.invoke_bedrock_model')
@@ -280,39 +284,15 @@ class TestOutpaint:
         assert request_body['creativity'] == 0.7
         assert request_body['seed'] == 12345
 
-    @pytest.mark.asyncio
-    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.invoke_bedrock_model')
-    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.save_images')
-    async def test_outpaint_default_directions(
-        self,
-        mock_save_images,
-        mock_invoke_bedrock,
-        mock_bedrock_runtime_client,
-        sample_image_base64,
-    ):
-        """Test outpaint with default direction values (all zeros)."""
-        mock_invoke_bedrock.return_value = {'images': ['base64_image']}
-        mock_save_images.return_value = ['/path/to/image.png']
+    def test_outpaint_requires_a_direction(self, sample_image_base64):
+        """Test the all-zero default is rejected locally, since Bedrock requires a direction."""
+        with pytest.raises(ValidationError, match='At least one of left, right, up or down'):
+            OutpaintParams(image=sample_image_base64, prompt='extend the scene')
 
-        params = OutpaintParams(
-            image=sample_image_base64,
-            prompt='extend the scene',
-        )
-
-        result = await outpaint(
-            params=params,
-            bedrock_client=mock_bedrock_runtime_client,
-        )
-
-        assert result.status == 'success'
-
-        # Check default values
-        call_args = mock_invoke_bedrock.call_args[1]
-        request_body = call_args['request_body']
-        assert request_body['left'] == 0
-        assert request_body['right'] == 0
-        assert request_body['up'] == 0
-        assert request_body['down'] == 0
+    def test_outpaint_accepts_a_single_direction(self, sample_image_base64):
+        """Test one non-zero direction is enough."""
+        params = OutpaintParams(image=sample_image_base64, prompt='extend the scene', down=1)
+        assert (params.left, params.right, params.up, params.down) == (0, 0, 0, 1)
 
 
 class TestSearchAndReplace:
@@ -478,24 +458,26 @@ class TestRemoveObject:
         assert 'mask' in request_body
 
     @pytest.mark.asyncio
-    async def test_remove_object_mask_validation(
+    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.invoke_bedrock_model')
+    @patch('awslabs.bedrock_image_mcp_server.services.stability_edit.save_images')
+    async def test_remove_object_sends_mismatched_mask(
         self,
+        mock_save_images,
+        mock_invoke_bedrock,
         mock_bedrock_runtime_client,
         sample_image_base64,
         sample_mismatched_mask_base64,
     ):
-        """Test remove_object fails with mismatched mask dimensions."""
-        params = RemoveObjectParams(
-            image=sample_image_base64,
-            mask=sample_mismatched_mask_base64,
-        )
+        """Test a mask smaller than the image reaches Bedrock, which resizes it."""
+        mock_invoke_bedrock.return_value = {'images': ['base64_image']}
+        mock_save_images.return_value = ['/path/to/image.png']
 
-        # Should raise ValueError for dimension mismatch
-        with pytest.raises(ValueError, match='Mask dimensions .* do not match'):
-            await remove_object(
-                params=params,
-                bedrock_client=mock_bedrock_runtime_client,
-            )
+        params = RemoveObjectParams(image=sample_image_base64, mask=sample_mismatched_mask_base64)
+        result = await remove_object(params=params, bedrock_client=mock_bedrock_runtime_client)
+
+        assert result.status == 'success'
+        request_body = mock_invoke_bedrock.call_args[1]['request_body']
+        assert request_body['mask'] == sample_mismatched_mask_base64
 
 
 class TestRemoveBackground:

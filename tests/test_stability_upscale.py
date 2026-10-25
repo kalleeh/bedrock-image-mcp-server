@@ -37,6 +37,9 @@ from PIL import Image
 from unittest.mock import MagicMock, patch
 
 
+UPSCALE_MODULE = 'awslabs.bedrock_image_mcp_server.services.stability_upscale'
+
+
 def create_test_image_base64(width=512, height=512, format='PNG'):
     """Create a valid test image and return as base64 string."""
     img = Image.new('RGB', (width, height), color='blue')
@@ -48,6 +51,11 @@ def create_test_image_base64(width=512, height=512, format='PNG'):
 
 class TestUpscaleCreative:
     """Tests for the upscale_creative function."""
+
+    def test_params_default_to_jpeg(self):
+        """Test the model defaults to jpeg, matching the tool, since PNG output never fits."""
+        params = CreativeUpscaleParams(image=create_test_image_base64(), prompt='p')
+        assert params.output_format is OutputFormat.JPEG
 
     @pytest.mark.asyncio
     async def test_successful_upscale(self, mock_bedrock_runtime_client, temp_workspace_dir):
@@ -231,3 +239,80 @@ class TestImageValidation:
 
         # Should still succeed but may have logged a warning
         assert response.status == 'success'
+
+
+class TestDocumentedUpscaleLimits:
+    """Tests for the input limits AWS documents for the upscale models."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('size', [(32, 32), (32, 1536), (1536, 32)])
+    async def test_fast_upscale_accepts_documented_range(self, size, mock_bedrock_runtime_client):
+        """Test fast upscale accepts 32-1,536px per side, which AWS documents as valid."""
+        params = FastUpscaleParams(image=create_test_image_base64(*size))
+
+        with (
+            patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke,
+            patch(f'{UPSCALE_MODULE}.save_images', return_value=['/tmp/out.png']),
+        ):
+            mock_invoke.return_value = {'images': ['upscaled']}
+            response = await upscale_fast(
+                params=params, bedrock_client=mock_bedrock_runtime_client
+            )
+
+        assert response.status == 'success'
+        mock_invoke.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'size, match',
+        [
+            ((31, 64), 'below minimum 32px'),
+            ((64, 31), 'below minimum 32px'),
+            ((1537, 64), '1536px per-side maximum'),
+            ((64, 1537), '1536px per-side maximum'),
+        ],
+    )
+    async def test_fast_upscale_rejects_outside_range(
+        self, size, match, mock_bedrock_runtime_client
+    ):
+        """Test fast upscale rejects sides outside 32-1,536px before calling Bedrock."""
+        params = FastUpscaleParams(image=create_test_image_base64(*size))
+
+        with patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke:
+            with pytest.raises(ValueError, match=match):
+                await upscale_fast(params=params, bedrock_client=mock_bedrock_runtime_client)
+
+        mock_invoke.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('size', [(64, 160), (160, 64)])
+    async def test_conservative_upscale_accepts_2_5_to_1(self, size, mock_bedrock_runtime_client):
+        """Test the 1:2.5 and 2.5:1 extremes are accepted."""
+        params = ConservativeUpscaleParams(image=create_test_image_base64(*size), prompt='p')
+
+        with (
+            patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke,
+            patch(f'{UPSCALE_MODULE}.save_images', return_value=['/tmp/out.png']),
+        ):
+            mock_invoke.return_value = {'images': ['upscaled']}
+            response = await upscale_conservative(
+                params=params, bedrock_client=mock_bedrock_runtime_client
+            )
+
+        assert response.status == 'success'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('size', [(64, 161), (161, 64)])
+    async def test_conservative_upscale_rejects_beyond_2_5_to_1(
+        self, size, mock_bedrock_runtime_client
+    ):
+        """Test an aspect ratio past 2.5:1 is rejected before calling Bedrock."""
+        params = ConservativeUpscaleParams(image=create_test_image_base64(*size), prompt='p')
+
+        with patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke:
+            with pytest.raises(ValueError, match='1:2.5 to 2.5:1'):
+                await upscale_conservative(
+                    params=params, bedrock_client=mock_bedrock_runtime_client
+                )
+
+        mock_invoke.assert_not_called()
