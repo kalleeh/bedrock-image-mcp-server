@@ -38,6 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2 x radius pixels across instead of one pixel larger and clipped at the right and bottom edges.
 - The README's IAM policy example was missing the Stable Image Ultra and Core model ARNs.
 
+### Changed
+- **Releases are verified before publishing.** The publish workflow now refuses a release whose
+  tag does not match all three version sites (project, commitizen, `__version__`), and runs
+  lint, pyright and the test suite before building.
+- **Docker:** added a `.dockerignore`, so the build no longer copies the host's `.venv`, git
+  history and caches into the image. Removed the healthcheck, which could only ever report
+  healthy for a stdio server running as PID 1. Dependabot now keeps the GitHub Actions, base
+  image digest, `uv.lock` and `uv-requirements.txt` pins current.
+- The upscale tests now check the request sent to Bedrock and each input pixel cap; previously
+  dropping `creativity`, `style_preset` or a size cap left the suite green.
+
 ### Removed
 - **The Nova Canvas tools `generate_image` and `generate_image_with_colors`.** AWS retired
   Amazon Nova Canvas on 2026-09-30, and every request to it now fails with

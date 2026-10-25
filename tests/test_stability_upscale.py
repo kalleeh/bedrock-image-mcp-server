@@ -104,6 +104,17 @@ class TestUpscaleCreative:
         assert response.prompt == 'high quality upscaled image'
         assert response.metadata['creativity'] == 0.3
 
+        mock_invoke.assert_called_once()
+        call = mock_invoke.call_args[1]
+        assert call['model_id'] == STABLE_UPSCALE_CREATIVE_MODEL_ID
+        assert call['request_body'] == {
+            'image': base64_image,
+            'prompt': 'high quality upscaled image',
+            'creativity': 0.3,
+            'seed': 0,
+            'output_format': 'png',
+        }
+
     @pytest.mark.asyncio
     async def test_upscale_with_style_preset(
         self, mock_bedrock_runtime_client, temp_workspace_dir
@@ -132,6 +143,9 @@ class TestUpscaleCreative:
 
         assert response.status == 'success'
         assert response.metadata['style_preset'] == 'photographic'
+        request_body = mock_invoke.call_args[1]['request_body']
+        assert request_body['style_preset'] == 'photographic'
+        assert request_body['creativity'] == 0.4
 
 
 class TestUpscaleConservative:
@@ -143,7 +157,11 @@ class TestUpscaleConservative:
         base64_image = create_test_image_base64()
 
         params = ConservativeUpscaleParams(
-            image=base64_image, prompt='preserve original details', output_format=OutputFormat.PNG
+            image=base64_image,
+            prompt='preserve original details',
+            negative_prompt='blur',
+            seed=7,
+            output_format=OutputFormat.WEBP,
         )
 
         with patch(
@@ -162,6 +180,16 @@ class TestUpscaleConservative:
         assert len(response.paths) == 1
         assert response.model_id == STABLE_UPSCALE_CONSERVATIVE_MODEL_ID
         assert response.prompt == 'preserve original details'
+
+        call = mock_invoke.call_args[1]
+        assert call['model_id'] == STABLE_UPSCALE_CONSERVATIVE_MODEL_ID
+        assert call['request_body'] == {
+            'image': base64_image,
+            'prompt': 'preserve original details',
+            'negative_prompt': 'blur',
+            'seed': 7,
+            'output_format': 'webp',
+        }
 
 
 class TestUpscaleFast:
@@ -192,6 +220,11 @@ class TestUpscaleFast:
         assert response.model_id == STABLE_UPSCALE_FAST_MODEL_ID
         assert response.metadata['upscale_factor'] == '4x'
 
+        call = mock_invoke.call_args[1]
+        assert call['model_id'] == STABLE_UPSCALE_FAST_MODEL_ID
+        # Fast upscale takes no prompt, seed or creativity.
+        assert call['request_body'] == {'image': base64_image, 'output_format': 'png'}
+
     @pytest.mark.asyncio
     async def test_image_too_small(self, mock_bedrock_runtime_client, temp_workspace_dir):
         """Test fast upscale with image below minimum pixels."""
@@ -209,35 +242,63 @@ class TestUpscaleFast:
 
 
 class TestImageValidation:
-    """Tests for image dimension validation in upscale services."""
+    """Tests for the input pixel caps in upscale services."""
 
     @pytest.mark.asyncio
-    async def test_creative_upscale_warns_large_image(
-        self, mock_bedrock_runtime_client, temp_workspace_dir, caplog
+    @pytest.mark.parametrize(
+        'upscale, params_cls, size',
+        [
+            (upscale_creative, CreativeUpscaleParams, (1024, 1025)),
+            (upscale_fast, FastUpscaleParams, (1024, 1025)),
+            (upscale_conservative, ConservativeUpscaleParams, (3072, 3073)),
+        ],
+        ids=['creative-1MP', 'fast-1MP', 'conservative-9.4MP'],
+    )
+    async def test_input_over_pixel_cap_is_rejected(
+        self, upscale, params_cls, size, mock_bedrock_runtime_client
     ):
-        """Test that creative upscale warns when image is too large."""
-        # Create image larger than recommended (but still valid for testing)
-        base64_image = create_test_image_base64(width=1024, height=1024)
-
-        params = CreativeUpscaleParams(
-            image=base64_image,
-            prompt='test prompt',
-            creativity=0.3,
-            output_format=OutputFormat.PNG,
+        """Test one row over each documented pixel cap is rejected before calling Bedrock."""
+        image = create_test_image_base64(*size)
+        params = (
+            params_cls(image=image)
+            if params_cls is FastUpscaleParams
+            else params_cls(image=image, prompt='p')
         )
 
-        with patch(
-            'awslabs.bedrock_image_mcp_server.services.stability_upscale.invoke_bedrock_model'
-        ) as mock_invoke:
-            mock_invoke.return_value = {'images': [base64_image], 'finish_reasons': ['SUCCESS']}
+        with patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke:
+            with pytest.raises(ValueError, match='exceeding maximum'):
+                await upscale(params=params, bedrock_client=mock_bedrock_runtime_client)
 
-            response = await upscale_creative(
-                params=params,
-                bedrock_client=mock_bedrock_runtime_client,
-                workspace_dir=temp_workspace_dir,
-            )
+        mock_invoke.assert_not_called()
 
-        # Should still succeed but may have logged a warning
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'upscale, params_cls, size',
+        [
+            (upscale_creative, CreativeUpscaleParams, (1024, 1024)),
+            (upscale_fast, FastUpscaleParams, (1024, 1024)),
+            (upscale_conservative, ConservativeUpscaleParams, (3072, 3072)),
+        ],
+        ids=['creative-1MP', 'fast-1MP', 'conservative-9.4MP'],
+    )
+    async def test_input_at_pixel_cap_is_accepted(
+        self, upscale, params_cls, size, mock_bedrock_runtime_client
+    ):
+        """Test an image exactly at the cap still goes through."""
+        image = create_test_image_base64(*size)
+        params = (
+            params_cls(image=image)
+            if params_cls is FastUpscaleParams
+            else params_cls(image=image, prompt='p')
+        )
+
+        with (
+            patch(f'{UPSCALE_MODULE}.invoke_bedrock_model') as mock_invoke,
+            patch(f'{UPSCALE_MODULE}.save_images', return_value=['/tmp/out.png']),
+        ):
+            mock_invoke.return_value = {'images': ['upscaled']}
+            response = await upscale(params=params, bedrock_client=mock_bedrock_runtime_client)
+
         assert response.status == 'success'
 
 

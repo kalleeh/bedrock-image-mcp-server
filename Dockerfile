@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# dependabot should continue to update this to the latest hash.
+# Dependabot keeps this digest current (.github/dependabot.yml).
 FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0e69972cce2bbc6cc633eba294bae1d12abea8bd05303b AS uv
 
 # Install the project into `/app`
@@ -77,12 +77,9 @@ RUN apk update && \
 # Copy application artifacts from build stage
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
-# Get healthcheck script
-COPY ./docker-healthcheck.sh /usr/local/bin/docker-healthcheck.sh
-
 # Run as non-root
 USER app
 
-# When running the container, add --db-path and a bind mount to the host's db file
-HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 CMD ["docker-healthcheck.sh"]
+# No HEALTHCHECK: this is a stdio server running as PID 1, so the container exits when the
+# server does and there is no port to probe. A process check could only ever report healthy.
 ENTRYPOINT ["bedrock-image-mcp-server"]
