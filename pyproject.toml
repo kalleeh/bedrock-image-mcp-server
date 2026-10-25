@@ -21,7 +21,6 @@ license = {text = "Apache-2.0"}
 license-files = ["LICENSE", "NOTICE" ]
 
 authors = [
-    {name = "Amazon Web Services"},
     {name = "Karl Wallbom", email = "kalleeh@users.noreply.github.com"},
 ]
 classifiers = [
