@@ -43,6 +43,7 @@ from awslabs.bedrock_image_mcp_server.consts import (
     STDIN_EOF_GRACE_SECONDS,
 )
 from awslabs.bedrock_image_mcp_server.models.common import (
+    ImageGenerationResponse,
     McpImageGenerationResponse,
     OutputFormat,
 )
@@ -112,7 +113,7 @@ from loguru import logger
 from mcp.server.mcpserver import Context, MCPServer
 from pathlib import Path
 from pydantic import Field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Annotated, Optional
 
 
 # Logging
@@ -350,6 +351,37 @@ class ImageServiceError(Exception):
     """Raised when a Bedrock image service reports a failed operation."""
 
 
+def to_mcp_response(response: ImageGenerationResponse, failure: str) -> McpImageGenerationResponse:
+    """Convert a service response into the MCP tool result, or raise on failure.
+
+    Args:
+        response: The service's result.
+        failure: Prefix for the error message, e.g. 'Failed to upscale image'.
+
+    Returns:
+        The saved image paths as percent-encoded file:// URIs.
+
+    Raises:
+        ImageServiceError: If the service reported a failure.
+    """
+    if response.status != 'success':
+        raise ImageServiceError(f'{failure}: {response.message}')
+    return McpImageGenerationResponse(
+        status='success',
+        paths=[Path(path).as_uri() for path in response.paths],
+    )
+
+
+# Shared by every image-producing tool, so the guidance the model sees stays identical.
+WorkspaceDir = Annotated[
+    Optional[str],
+    Field(
+        description="""The current workspace directory where the image should be saved.
+        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
+    ),
+]
+
+
 def parse_output_format(output_format: str) -> OutputFormat:
     """Convert a caller-supplied format string to an OutputFormat.
 
@@ -461,11 +493,7 @@ async def mcp_generate_image_sd35(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Generate an image from a text prompt. BALANCED quality and cost.
 
@@ -563,13 +591,7 @@ async def mcp_generate_image_sd35(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate SD3.5 image: {response.message}')
+        return to_mcp_response(response, 'Failed to generate SD3.5 image')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_sd35: {str(e)}')
         raise
@@ -597,11 +619,7 @@ async def mcp_generate_image_ultra(
         default=DEFAULT_OUTPUT_FORMAT,
         description='Output image format: png or jpeg. This model does not support webp.',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
     filename: Optional[str] = Field(
         default=None,
         description='The name of the file to save the image to (without extension)',
@@ -676,13 +694,7 @@ async def mcp_generate_image_ultra(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate Ultra image: {response.message}')
+        return to_mcp_response(response, 'Failed to generate Ultra image')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_ultra: {str(e)}')
         raise
@@ -710,11 +722,7 @@ async def mcp_generate_image_core(
         default=DEFAULT_OUTPUT_FORMAT,
         description='Output image format: png or jpeg. This model does not support webp.',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
     filename: Optional[str] = Field(
         default=None,
         description='The name of the file to save the image to (without extension)',
@@ -788,13 +796,7 @@ async def mcp_generate_image_core(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate Core image: {response.message}')
+        return to_mcp_response(response, 'Failed to generate Core image')
     except Exception as e:
         logger.error(f'Error in mcp_generate_image_core: {str(e)}')
         raise
@@ -827,11 +829,7 @@ async def mcp_transform_image_sd35(
         default=None,
         description='The name of the file to save the transformed image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Transform an existing image using Stable Diffusion 3.5 Large with text guidance.
 
@@ -922,13 +920,7 @@ async def mcp_transform_image_sd35(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to transform image with SD3.5: {response.message}')
+        return to_mcp_response(response, 'Failed to transform image with SD3.5')
     except Exception as e:
         logger.error(f'Error in mcp_transform_image_sd35: {str(e)}')
         raise
@@ -966,11 +958,7 @@ async def mcp_upscale_creative(
         default=None,
         description='The name of the file to save the upscaled image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Upscale images to 4K with creative AI enhancement.
 
@@ -1058,13 +1046,7 @@ async def mcp_upscale_creative(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to upscale image: {response.message}')
+        return to_mcp_response(response, 'Failed to upscale image')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_creative: {str(e)}')
         raise
@@ -1091,11 +1073,7 @@ async def mcp_upscale_conservative(
         default=None,
         description='The name of the file to save the upscaled image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Upscale images to 4K while preserving original details.
 
@@ -1161,13 +1139,7 @@ async def mcp_upscale_conservative(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to upscale image: {response.message}')
+        return to_mcp_response(response, 'Failed to upscale image')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_conservative: {str(e)}')
         raise
@@ -1185,11 +1157,7 @@ async def mcp_upscale_fast(
         default=None,
         description='The name of the file to save the upscaled image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Fast 4x upscaling without creative enhancement.
 
@@ -1250,13 +1218,7 @@ async def mcp_upscale_fast(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to upscale image: {response.message}')
+        return to_mcp_response(response, 'Failed to upscale image')
     except Exception as e:
         logger.error(f'Error in mcp_upscale_fast: {str(e)}')
         raise
@@ -1290,11 +1252,7 @@ async def mcp_inpaint(
         default=None,
         description='The name of the file to save the inpainted image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Fill masked regions with AI-generated content (generative fill).
 
@@ -1353,13 +1311,7 @@ async def mcp_inpaint(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to inpaint image: {response.message}')
+        return to_mcp_response(response, 'Failed to inpaint image')
     except Exception as e:
         logger.error(f'Error in mcp_inpaint: {str(e)}')
         raise
@@ -1408,11 +1360,7 @@ async def mcp_outpaint(
         default=None,
         description='The name of the file to save the outpainted image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Extend images beyond their original boundaries.
 
@@ -1473,13 +1421,7 @@ async def mcp_outpaint(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to outpaint image: {response.message}')
+        return to_mcp_response(response, 'Failed to outpaint image')
     except Exception as e:
         logger.error(f'Error in mcp_outpaint: {str(e)}')
         raise
@@ -1509,11 +1451,7 @@ async def mcp_search_replace(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Find and replace objects using text prompts.
 
@@ -1588,13 +1526,7 @@ async def mcp_search_replace(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to search and replace: {response.message}')
+        return to_mcp_response(response, 'Failed to search and replace')
     except Exception as e:
         logger.error(f'Error in mcp_search_replace: {str(e)}')
         raise
@@ -1624,11 +1556,7 @@ async def mcp_search_recolor(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Recolor specific objects using text prompts.
 
@@ -1704,13 +1632,7 @@ async def mcp_search_recolor(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to search and recolor: {response.message}')
+        return to_mcp_response(response, 'Failed to search and recolor')
     except Exception as e:
         logger.error(f'Error in mcp_search_recolor: {str(e)}')
         raise
@@ -1739,11 +1661,7 @@ async def mcp_remove_object(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Remove unwanted objects from images.
 
@@ -1798,13 +1716,7 @@ async def mcp_remove_object(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to remove object: {response.message}')
+        return to_mcp_response(response, 'Failed to remove object')
     except Exception as e:
         logger.error(f'Error in mcp_remove_object: {str(e)}')
         raise
@@ -1818,11 +1730,7 @@ async def mcp_remove_background(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Automatically remove backgrounds from images.
 
@@ -1870,13 +1778,7 @@ async def mcp_remove_background(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to remove background: {response.message}')
+        return to_mcp_response(response, 'Failed to remove background')
     except Exception as e:
         logger.error(f'Error in mcp_remove_background: {str(e)}')
         raise
@@ -1911,11 +1813,7 @@ async def mcp_sketch_to_image(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Convert sketches or line art into detailed images.
 
@@ -1982,13 +1880,7 @@ async def mcp_sketch_to_image(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to convert sketch: {response.message}')
+        return to_mcp_response(response, 'Failed to convert sketch')
     except Exception as e:
         logger.error(f'Error in mcp_sketch_to_image: {str(e)}')
         raise
@@ -2023,11 +1915,7 @@ async def mcp_structure_control(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Generate images following structural guides like edge maps or depth maps.
 
@@ -2096,15 +1984,7 @@ async def mcp_structure_control(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(
-                f'Failed to generate with structure control: {response.message}'
-            )
+        return to_mcp_response(response, 'Failed to generate with structure control')
     except Exception as e:
         logger.error(f'Error in mcp_structure_control: {str(e)}')
         raise
@@ -2137,11 +2017,7 @@ async def mcp_style_guide(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Generate images matching a reference style.
 
@@ -2209,13 +2085,7 @@ async def mcp_style_guide(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to generate with style guide: {response.message}')
+        return to_mcp_response(response, 'Failed to generate with style guide')
     except Exception as e:
         logger.error(f'Error in mcp_style_guide: {str(e)}')
         raise
@@ -2259,11 +2129,7 @@ async def mcp_style_transfer(
         default=None,
         description='The name of the file to save the image to (without extension)',
     ),
-    workspace_dir: Optional[str] = Field(
-        default=None,
-        description="""The current workspace directory where the image should be saved.
-        CRITICAL: Assistant must always provide the current IDE workspace directory parameter to save images to the user's current project.""",
-    ),
+    workspace_dir: WorkspaceDir = None,
 ) -> McpImageGenerationResponse:
     """Apply style from one image to the content of another.
 
@@ -2344,13 +2210,7 @@ async def mcp_style_transfer(
             filename=filename,
         )
 
-        if response.status == 'success':
-            return McpImageGenerationResponse(
-                status='success',
-                paths=[Path(path).as_uri() for path in response.paths],
-            )
-        else:
-            raise ImageServiceError(f'Failed to transfer style: {response.message}')
+        return to_mcp_response(response, 'Failed to transfer style')
     except Exception as e:
         logger.error(f'Error in mcp_style_transfer: {str(e)}')
         raise
