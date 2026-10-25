@@ -76,13 +76,13 @@ different backend. Use `seed=0` for explicitly random output.
 
 #### Conservative upscaling
 - Upscale to 4K while preserving details with `upscale_conservative`
-- Supports inputs up to 9.4 megapixels
+- Supports inputs up to 9.4 megapixels, aspect ratio 1:2.5 to 2.5:1
 - Minimal alterations to original image
 
 #### Fast upscaling
 - Quick 4x upscaling with `upscale_fast`
 - Fast processing for quick resolution increases
-- Supports inputs from 32x32 to 1MP
+- Supports inputs from 32px to 1,536px per side, up to 1MP
 
 ### Stability AI Edit Services (6 tools)
 
@@ -502,6 +502,8 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
             ],
             "Resource": [
                 "arn:aws:bedrock:*::foundation-model/stability.sd3-5-large-v1:0",
+                "arn:aws:bedrock:*::foundation-model/stability.stable-image-ultra-v1:1",
+                "arn:aws:bedrock:*::foundation-model/stability.stable-image-core-v1:1",
                 "arn:aws:bedrock:*::foundation-model/us.stability.stable-creative-upscale-v1:0",
                 "arn:aws:bedrock:*::foundation-model/us.stability.stable-conservative-upscale-v1:0",
                 "arn:aws:bedrock:*::foundation-model/us.stability.stable-fast-upscale-v1:0",
@@ -592,8 +594,9 @@ base64-encoded inside the JSON response and caps that response at 16MB, so the p
 ceiling is roughly a 12MB image. Ordinary generation is ~2MB and never comes close; upscaling
 returns 3K-4K images, where a PNG is 20-35MB. It is an API limit, not a bug in this server.
 
-PNG is supported and remains the default for every tool. The catch is that it is the default
-for the case most likely to exceed the cap — a full-size upscale.
+PNG is supported and is the default for every tool except `upscale_creative`, which defaults to
+JPEG because its PNG output never fits. Elsewhere PNG is the default for the case most likely to
+exceed the cap — a full-size upscale.
 
 **Solution**: request `output_format="jpeg"` or `"webp"` for full-size upscales. Measured on a
 1MP input:
@@ -617,8 +620,9 @@ PNG work there.
 **Solutions**:
 - **SD3.5**: Use one of the supported aspect ratios (16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21)
 - **Upscale services**: Check input image size constraints:
-  - Creative/Fast: 64x64 to 1MP
-  - Conservative: 64x64 to 9.4MP
+  - Creative: 64px per side minimum, up to 1MP
+  - Fast: 32-1,536px per side, up to 1MP
+  - Conservative: 64px per side minimum, up to 9.4MP, aspect ratio 1:2.5 to 2.5:1
 
 #### "Content filtered" responses
 

@@ -15,7 +15,11 @@
 
 import base64
 import os
-from awslabs.bedrock_image_mcp_server.consts import MAX_DECODED_IMAGE_PIXELS
+from awslabs.bedrock_image_mcp_server.consts import (
+    MAX_DECODED_IMAGE_PIXELS,
+    MAX_INPUT_IMAGE_BYTES,
+    MAX_MASK_FEATHER,
+)
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFilter
 from typing import Optional, Tuple
@@ -40,10 +44,17 @@ def encode_image_file(file_path: str) -> str:
     Raises:
         FileNotFoundError: If the file does not exist.
         IOError: If the file cannot be read.
-        ValueError: If the file is not a valid image.
+        ValueError: If the file is not a valid image or is too large to send to Bedrock.
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f'Image file not found: {file_path}')
+
+    file_size = os.path.getsize(file_path)
+    if file_size > MAX_INPUT_IMAGE_BYTES:
+        raise ValueError(
+            f'Image file {file_path} is {file_size} bytes, exceeding the maximum '
+            f'{MAX_INPUT_IMAGE_BYTES} bytes that fits in a Bedrock request once base64-encoded'
+        )
 
     try:
         with open(file_path, 'rb') as image_file:
@@ -178,6 +189,8 @@ def create_rectangular_mask(
     draw.rectangle([x, y, x + mask_width - 1, y + mask_height - 1], fill=255)
 
     # Apply feathering if requested
+    if not 0 <= feather <= MAX_MASK_FEATHER:
+        raise ValueError(f'Feather must be between 0 and {MAX_MASK_FEATHER}: {feather}')
     if feather > 0:
         mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
 
@@ -243,10 +256,19 @@ def create_ellipse_mask(
 
     # Draw white ellipse
     draw = ImageDraw.Draw(mask)
-    bbox = [center_x - radius_x, center_y - radius_y, center_x + radius_x, center_y + radius_y]
+    # PIL's bounding box is inclusive, so stop one pixel short to draw exactly 2 * radius
+    # pixels across, matching the bounds check above and the rectangle mask.
+    bbox = [
+        center_x - radius_x,
+        center_y - radius_y,
+        center_x + radius_x - 1,
+        center_y + radius_y - 1,
+    ]
     draw.ellipse(bbox, fill=255)
 
     # Apply feathering if requested
+    if not 0 <= feather <= MAX_MASK_FEATHER:
+        raise ValueError(f'Feather must be between 0 and {MAX_MASK_FEATHER}: {feather}')
     if feather > 0:
         mask = mask.filter(ImageFilter.GaussianBlur(radius=feather))
 

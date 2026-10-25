@@ -13,6 +13,7 @@
 # limitations under the License.
 """Amazon Bedrock image generation MCP Server implementation."""
 
+import asyncio
 import boto3
 import os
 import sys
@@ -109,6 +110,7 @@ from awslabs.bedrock_image_mcp_server.utils.image_utils import (
 from botocore.config import Config
 from loguru import logger
 from mcp.server.mcpserver import Context, MCPServer
+from pathlib import Path
 from pydantic import Field
 from typing import TYPE_CHECKING, Optional
 
@@ -302,9 +304,9 @@ available in the configured AWS_REGION.
 - **transform_image_sd35**: Transform an existing image using SD3.5 with text guidance. The only image-to-image option of the four.
 
 ### Stability AI Upscale Tools
-All three support png (the default), jpeg and webp. Prefer jpeg or webp for full-size
-upscales: the 3K-4K result exceeds Bedrock's 16MB response limit as a PNG. PNG is fine for
-small outputs, except in upscale_creative whose output size is fixed.
+All three support png, jpeg and webp. Prefer jpeg or webp for full-size upscales: the 3K-4K
+result exceeds Bedrock's 16MB response limit as a PNG. PNG is the default and fine for small
+outputs, except in upscale_creative, whose output size is fixed and which defaults to jpeg.
 - **upscale_creative**: Upscale images to 4K with creative AI enhancement (20-40x upscale).
 - **upscale_conservative**: Upscale images to 4K while preserving original details.
 - **upscale_fast**: Fast 4x upscaling without creative enhancement.
@@ -564,7 +566,7 @@ async def mcp_generate_image_sd35(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to generate SD3.5 image: {response.message}')
@@ -677,7 +679,7 @@ async def mcp_generate_image_ultra(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to generate Ultra image: {response.message}')
@@ -789,7 +791,7 @@ async def mcp_generate_image_core(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to generate Core image: {response.message}')
@@ -923,7 +925,7 @@ async def mcp_transform_image_sd35(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to transform image with SD3.5: {response.message}')
@@ -956,8 +958,9 @@ async def mcp_upscale_creative(
         description='Seed for reproducible generation (0-4,294,967,294)',
     ),
     output_format: str = Field(
-        default=DEFAULT_OUTPUT_FORMAT,
-        description='Output image format: "jpeg", "png", or "webp"',
+        default='jpeg',
+        description='Output image format: "jpeg" (default), "png", or "webp". The ~3150x3150 '
+        'output exceeds the Bedrock response limit as a PNG.',
     ),
     filename: Optional[str] = Field(
         default=None,
@@ -987,10 +990,9 @@ async def mcp_upscale_creative(
     - Optional style presets for specific aesthetics
     - Input: 64x64 to 1 megapixel (1024x1024)
 
-    IMPORTANT: pass output_format="jpeg" (or "webp") for this tool. All three formats are
-    supported and png is the default, but this tool's output is a fixed ~3150x3150 regardless
-    of input size, and a PNG that large exceeds Bedrock's 16MB response limit — so there is no
-    input size at which the default succeeds here.
+    NOTE ON output_format: jpeg is the default for this tool, and webp also works. Do not pass
+    png: this tool's output is a fixed ~3150x3150 regardless of input size, and a PNG that
+    large exceeds Bedrock's 16MB response limit, so png fails at every input size.
 
     ## Creativity Parameter Guide
 
@@ -1059,7 +1061,7 @@ async def mcp_upscale_creative(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
@@ -1111,7 +1113,7 @@ async def mcp_upscale_conservative(
     - Upscales images to 4K resolution
     - Preserves original image characteristics
     - Minimal AI alterations
-    - Input: 64x64 to 9.4 megapixels
+    - Input: 64px per side minimum, up to 9.4 megapixels, aspect ratio 1:2.5 to 2.5:1
 
     NOTE ON output_format: png (the default), jpeg and webp are all supported. Prefer jpeg or
     webp for 1MP inputs — the ~3112x3112 result is about 20MB as a PNG, over Bedrock's 16MB
@@ -1162,7 +1164,7 @@ async def mcp_upscale_conservative(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
@@ -1203,7 +1205,7 @@ async def mcp_upscale_fast(
     - Fast 4x upscaling
     - No AI enhancement or style changes
     - Simple and straightforward
-    - Input: 1024 to 1 megapixel (1024x1024)
+    - Input: 32-1,536px per side, up to 1 megapixel
 
     NOTE ON output_format: png (the default), jpeg and webp are all supported. Output scales 4x
     with the input, so prefer jpeg or webp for larger inputs — a 1 megapixel input returns
@@ -1251,7 +1253,7 @@ async def mcp_upscale_fast(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to upscale image: {response.message}')
@@ -1354,7 +1356,7 @@ async def mcp_inpaint(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to inpaint image: {response.message}')
@@ -1421,7 +1423,7 @@ async def mcp_outpaint(
 
     ## Key Features
 
-    - Extend images in any direction (left, right, up, down)
+    - Extend images in any direction (left, right, up, down); at least one must be above 0
     - Generate content matching original style
     - Control creativity level
     - Useful for changing aspect ratios or expanding compositions
@@ -1474,7 +1476,7 @@ async def mcp_outpaint(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to outpaint image: {response.message}')
@@ -1589,7 +1591,7 @@ async def mcp_search_replace(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to search and replace: {response.message}')
@@ -1705,7 +1707,7 @@ async def mcp_search_recolor(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to search and recolor: {response.message}')
@@ -1799,7 +1801,7 @@ async def mcp_remove_object(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to remove object: {response.message}')
@@ -1871,7 +1873,7 @@ async def mcp_remove_background(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to remove background: {response.message}')
@@ -1983,7 +1985,7 @@ async def mcp_sketch_to_image(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to convert sketch: {response.message}')
@@ -2097,7 +2099,7 @@ async def mcp_structure_control(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(
@@ -2210,7 +2212,7 @@ async def mcp_style_guide(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to generate with style guide: {response.message}')
@@ -2345,7 +2347,7 @@ async def mcp_style_transfer(
         if response.status == 'success':
             return McpImageGenerationResponse(
                 status='success',
-                paths=[f'file://{path}' for path in response.paths],
+                paths=[Path(path).as_uri() for path in response.paths],
             )
         else:
             raise ImageServiceError(f'Failed to transfer style: {response.message}')
@@ -2411,7 +2413,8 @@ async def mcp_create_rectangular_mask(
     logger.debug('MCP tool create_rectangular_mask called')
 
     try:
-        mask_bytes = create_rectangular_mask(
+        mask_bytes = await asyncio.to_thread(
+            create_rectangular_mask,
             width=width,
             height=height,
             x=x,
@@ -2421,7 +2424,7 @@ async def mcp_create_rectangular_mask(
             feather=feather,
         )
 
-        mask_path = write_mask(mask_bytes, filename, workspace_dir)
+        mask_path = await asyncio.to_thread(write_mask, mask_bytes, filename, workspace_dir)
 
         logger.bind(
             path=mask_path,
@@ -2430,7 +2433,7 @@ async def mcp_create_rectangular_mask(
 
         return McpImageGenerationResponse(
             status='success',
-            paths=[f'file://{mask_path}'],
+            paths=[Path(mask_path).as_uri()],
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_rectangular_mask: {str(e)}')
@@ -2494,7 +2497,8 @@ async def mcp_create_ellipse_mask(
     logger.debug('MCP tool create_ellipse_mask called')
 
     try:
-        mask_bytes = create_ellipse_mask(
+        mask_bytes = await asyncio.to_thread(
+            create_ellipse_mask,
             width=width,
             height=height,
             center_x=center_x,
@@ -2504,7 +2508,7 @@ async def mcp_create_ellipse_mask(
             feather=feather,
         )
 
-        mask_path = write_mask(mask_bytes, filename, workspace_dir)
+        mask_path = await asyncio.to_thread(write_mask, mask_bytes, filename, workspace_dir)
 
         logger.bind(
             path=mask_path,
@@ -2513,7 +2517,7 @@ async def mcp_create_ellipse_mask(
 
         return McpImageGenerationResponse(
             status='success',
-            paths=[f'file://{mask_path}'],
+            paths=[Path(mask_path).as_uri()],
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_ellipse_mask: {str(e)}')
@@ -2559,15 +2563,15 @@ async def mcp_create_full_mask(
     logger.debug('MCP tool create_full_mask called')
 
     try:
-        mask_bytes = create_full_mask(width=width, height=height)
+        mask_bytes = await asyncio.to_thread(create_full_mask, width=width, height=height)
 
-        mask_path = write_mask(mask_bytes, filename, workspace_dir)
+        mask_path = await asyncio.to_thread(write_mask, mask_bytes, filename, workspace_dir)
 
         logger.bind(path=mask_path).info(f'Created full mask: {width}x{height}')
 
         return McpImageGenerationResponse(
             status='success',
-            paths=[f'file://{mask_path}'],
+            paths=[Path(mask_path).as_uri()],
         )
     except Exception as e:
         logger.error(f'Error in mcp_create_full_mask: {str(e)}')

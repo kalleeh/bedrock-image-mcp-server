@@ -160,9 +160,10 @@ def resolve_image_input(value: str, label: str = 'image') -> str:
         IOError: If an existing file cannot be read.
         ValueError: If an existing file cannot be encoded.
     """
-    if os.path.exists(value):
-        logger.debug(f'Encoding {label} from file: {value}')
-        return encode_image_file(value)
+    path = os.path.expanduser(value)
+    if os.path.exists(path):
+        logger.debug(f'Encoding {label} from file: {path}')
+        return encode_image_file(path)
     logger.debug(f'Using provided base64 {label}')
     return value
 
@@ -407,8 +408,8 @@ async def invoke_bedrock_model(
             )
         elif error_code == 'ThrottlingException':
             raise BedrockAPIError(
-                message='Rate limit exceeded. AWS SDK will automatically retry with exponential backoff. '
-                'If this persists, consider requesting a quota increase.',
+                message='Rate limit exceeded, and the AWS SDK retries with backoff were exhausted. '
+                'Wait before trying again; if this persists, consider requesting a quota increase.',
                 error_code=error_code,
                 retryable=True,
             )
@@ -420,15 +421,37 @@ async def invoke_bedrock_model(
             )
         elif error_code == 'ServiceUnavailableException':
             raise BedrockAPIError(
-                message='Bedrock service is temporarily unavailable. AWS SDK will automatically retry.',
+                message='Bedrock service is temporarily unavailable, and the AWS SDK retries were '
+                'exhausted. Try again shortly.',
                 error_code=error_code,
                 retryable=True,
             )
         elif error_code == 'InternalServerException':
             raise BedrockAPIError(
-                message='Internal server error. AWS SDK will automatically retry.',
+                message='Bedrock returned an internal server error, and the AWS SDK retries were '
+                'exhausted. Try again shortly.',
                 error_code=error_code,
                 retryable=True,
+            )
+        elif error_code == 'ModelTimeoutException':
+            raise BedrockAPIError(
+                message=f'Model {model_id} took too long to process the request. Try again, or '
+                'use a smaller input image.',
+                error_code=error_code,
+                retryable=True,
+            )
+        elif error_code == 'ModelErrorException':
+            raise BedrockAPIError(
+                message=f'Model {model_id} failed while processing the request: {error_message}',
+                error_code=error_code,
+                retryable=False,
+            )
+        elif error_code == 'ServiceQuotaExceededException':
+            raise BedrockAPIError(
+                message=f'Service quota exceeded for model {model_id}: {error_message} '
+                'Request a quota increase in the Service Quotas console.',
+                error_code=error_code,
+                retryable=False,
             )
         else:
             # Unknown error - log for investigation
@@ -484,9 +507,8 @@ def save_images(
 
     # Create output directory if it doesn't exist
     try:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            logger.debug(f'Created output directory: {output_dir}')
+        # exist_ok: concurrent saves into a fresh workspace race to create the directory.
+        os.makedirs(output_dir, exist_ok=True)
     except Exception as e:
         raise IOError(f'Failed to create output directory {output_dir}: {str(e)}')
 

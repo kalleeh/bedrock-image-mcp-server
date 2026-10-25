@@ -17,13 +17,10 @@ This module defines the data models and validation logic for SD3.5 Large
 text-to-image and image-to-image generation.
 """
 
-import base64
 from awslabs.bedrock_image_mcp_server.consts import MAX_PROMPT_LENGTH_SD35, SD35_MAX_SEED
 from awslabs.bedrock_image_mcp_server.models.common import OutputFormat
 from enum import Enum
-from io import BytesIO
-from PIL import Image
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -94,7 +91,7 @@ class SD35ImageToImageParams(BaseModel):
 
     Attributes:
         prompt: Text description guiding the transformation (1-10,000 characters).
-        image: Base64-encoded input image.
+        image: Base64-encoded input image or file path, validated by the service.
         strength: Transformation intensity (0.0=preserve input, 1.0=ignore input).
         seed: Random seed for reproducible generation (0-4,294,967,294).
         negative_prompt: Text describing what to exclude from the image.
@@ -107,48 +104,3 @@ class SD35ImageToImageParams(BaseModel):
     seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
     output_format: OutputFormat = OutputFormat.PNG
-
-    @field_validator('image')
-    @classmethod
-    def validate_image_dimensions(cls, v: str) -> str:
-        """Validate that the image meets minimum dimension requirements.
-
-        SD3.5 requires images to be at least 64px on each side.
-        Accepts either file paths or base64-encoded image strings.
-
-        Args:
-            v: File path or base64-encoded image string.
-
-        Returns:
-            The validated image string (unchanged).
-
-        Raises:
-            ValueError: If image dimensions are below minimum (64px per side).
-        """
-        import os
-
-        try:
-            # Check if it's a file path
-            if os.path.exists(v):
-                # Load from file
-                with Image.open(v) as image:
-                    width, height = image.size
-            else:
-                # Assume it's base64
-                image_data = base64.b64decode(v)
-                with Image.open(BytesIO(image_data)) as image:
-                    width, height = image.size
-
-            # Validate minimum dimensions
-            if width < 64 or height < 64:
-                raise ValueError(
-                    f'Image dimensions ({width}x{height}) are below minimum requirement '
-                    f'of 64px per side for SD3.5'
-                )
-
-            return v
-
-        except Exception as e:
-            if isinstance(e, ValueError) and 'dimensions' in str(e):
-                raise
-            raise ValueError(f'Invalid image data: {str(e)}')

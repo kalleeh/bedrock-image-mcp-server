@@ -158,14 +158,13 @@ class TestGenerateTextToImage:
 
         # Verify result
         assert result.status == 'success'
-        assert 'Successfully generated 1 image(s)' in result.message
+        assert result.message == 'Successfully generated image using SD3.5'
         assert result.paths == ['/path/to/sd35_image.png']
         assert result.model_id == SD35_LARGE_MODEL_ID
         assert result.prompt == 'A futuristic cityscape at night'
         assert result.seed == 12345
         assert result.metadata['aspect_ratio'] == '16:9'
         assert result.metadata['mode'] == GenerationMode.TEXT_TO_IMAGE.value
-        assert result.metadata['finish_reasons'] == ['SUCCESS']
 
         # Verify invoke_bedrock_model was called correctly
         mock_invoke_bedrock.assert_called_once()
@@ -247,9 +246,13 @@ class TestGenerateTextToImage:
             prompt='Test prompt', aspect_ratio=AspectRatio.RATIO_1_1, seed=0
         )
 
-        # Verify exception is raised
-        with pytest.raises(ValueError, match='No images returned from Bedrock API'):
-            await generate_text_to_image(params=params, bedrock_client=mock_bedrock_runtime_client)
+        result = await generate_text_to_image(
+            params=params, bedrock_client=mock_bedrock_runtime_client
+        )
+
+        assert result.status == 'error'
+        assert result.message == 'No images generated'
+        assert result.paths == []
 
 
 class TestGenerateImageToImage:
@@ -303,7 +306,6 @@ class TestGenerateImageToImage:
         assert result.seed == 54321
         assert result.metadata['strength'] == 0.7
         assert result.metadata['mode'] == GenerationMode.IMAGE_TO_IMAGE.value
-        assert result.metadata['finish_reasons'] == ['SUCCESS']
 
         # Verify invoke_bedrock_model was called correctly
         mock_invoke_bedrock.assert_called_once()
@@ -372,9 +374,10 @@ class TestGenerateImageToImage:
         mock_invoke_bedrock.assert_called_once()
         call_args = mock_invoke_bedrock.call_args[1]
         request_body = call_args['request_body']
-        # The image should have been converted to base64
-        assert isinstance(request_body['image'], str)
-        assert len(request_body['image']) > 0
+        # The file is sent as its base64 contents, and the caller's params keep the path
+        with open(image_path, 'rb') as f:
+            assert request_body['image'] == base64.b64encode(f.read()).decode('utf-8')
+        assert params.image == image_path
 
         # Verify save_images was called with default prefix
         mock_save_images.assert_called_once()
@@ -454,8 +457,34 @@ class TestGenerateImageToImage:
             prompt='Test prompt', image=base64_image, strength=0.5, seed=0
         )
 
-        # Verify exception is raised
-        with pytest.raises(ValueError, match='No images returned from Bedrock API'):
+        result = await generate_image_to_image(
+            params=params, bedrock_client=mock_bedrock_runtime_client
+        )
+
+        assert result.status == 'error'
+        assert result.message == 'No images generated'
+        assert result.paths == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'image, match',
+        [
+            (create_test_image_base64(32, 32), 'below minimum 64px'),
+            # Strict decoding: the old lenient decoder silently dropped the invalid characters.
+            (create_test_image_base64()[:40] + ' !! ' + create_test_image_base64()[40:], 'decode'),
+        ],
+        ids=['undersized', 'corrupt-base64'],
+    )
+    @patch('awslabs.bedrock_image_mcp_server.services.sd35_service.invoke_bedrock_model')
+    async def test_invalid_image_rejected_before_bedrock(
+        self, mock_invoke_bedrock, image, match, mock_bedrock_runtime_client
+    ):
+        """Test the shared image checks reject bad input before any Bedrock call."""
+        params = SD35ImageToImageParams(prompt='Test prompt', image=image, strength=0.5)
+
+        with pytest.raises(ValueError, match=match):
             await generate_image_to_image(
                 params=params, bedrock_client=mock_bedrock_runtime_client
             )
+
+        mock_invoke_bedrock.assert_not_called()

@@ -33,9 +33,7 @@ from awslabs.bedrock_image_mcp_server.models.stability_models import (
 from awslabs.bedrock_image_mcp_server.services.bedrock_common import (
     finalize_image_response,
     invoke_bedrock_model,
-    measure_image,
     prepare_image,
-    resolve_image_input,
     save_images,
 )
 from loguru import logger
@@ -312,11 +310,12 @@ async def style_transfer(
     """
     logger.info('Starting style transfer')
 
-    init_image_base64 = resolve_image_input(params.init_image, 'init image')
-    style_image_base64 = resolve_image_input(params.style_image, 'style image')
-
-    init_width, init_height = measure_image(init_image_base64)
-    style_width, style_height = measure_image(style_image_base64)
+    init_image_base64, init_width, init_height = await prepare_image(
+        params.init_image, label='init image'
+    )
+    style_image_base64, style_width, style_height = await prepare_image(
+        params.style_image, label='style image'
+    )
 
     logger.info(f'Init image dimensions: {init_width}x{init_height}')
     logger.info(f'Style image dimensions: {style_width}x{style_height}')

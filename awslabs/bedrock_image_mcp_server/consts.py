@@ -64,10 +64,16 @@ DEFAULT_CHANGE_STRENGTH = 0.9
 # Pixel constraint constants
 MIN_IMAGE_DIMENSION = 64
 MAX_DECODED_IMAGE_PIXELS = 67108864  # 64 megapixels; guards against decompression bombs
+MAX_MASK_FEATHER = 50  # Gaussian blur radius cap for generated masks
+# InvokeModel caps the request body at 25,000,000 bytes and base64 inflates by 4/3, so a larger
+# file cannot be sent. Checked before reading so a huge file is never loaded into memory.
+MAX_INPUT_IMAGE_BYTES = 18_000_000
 MAX_CREATIVE_UPSCALE_INPUT_PIXELS = 1048576  # 1 megapixel
 MAX_CONSERVATIVE_UPSCALE_INPUT_PIXELS = 9437184  # ~9.4 megapixels
 MAX_FAST_UPSCALE_INPUT_PIXELS = 1048576  # 1 megapixel
-MIN_FAST_UPSCALE_INPUT_PIXELS = 1024  # Minimum pixels for fast upscale
+MIN_FAST_UPSCALE_DIMENSION = 32  # Fast upscale accepts 32-1,536px per side
+MAX_FAST_UPSCALE_DIMENSION = 1536
+MAX_CONSERVATIVE_UPSCALE_ASPECT_RATIO = 2.5  # Conservative accepts 1:2.5 to 2.5:1
 
 # AWS SDK Retry Configuration (following AWS best practices)
 # See: https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/retry-backoff.html
@@ -152,7 +158,7 @@ STABILITY_SERVICES_INSTRUCTIONS = """
 ## Upscale Services
 
 **On output_format for upscaling.** All three formats (png, jpeg, webp) are supported here as
-everywhere else, and png is the default. The constraint is output *size*, not format: Bedrock
+everywhere else; png is the default except for upscale_creative, which defaults to jpeg. The constraint is output *size*, not format: Bedrock
 returns the image base64-encoded in the JSON response and caps that response at 16MB, which
 works out to roughly a 12MB image. Ordinary generation is ~2MB and never comes close, but
 upscaling returns 3K-4K images, where a PNG is typically 20-35MB and the call fails with
@@ -178,7 +184,7 @@ the input, so PNG has no working input size there.
 ### Conservative Upscale
 - Upscales to 4K while preserving original details
 - Best for: Images that need resolution increase without alteration
-- Input: 64x64 to 9.4 megapixels
+- Input: 64px per side minimum, up to 9.4 megapixels, aspect ratio 1:2.5 to 2.5:1
 - No creativity parameter - focuses on detail preservation
 - Still accepts prompts for context
 - Use output_format="jpeg" or "webp" for 1MP inputs: the ~3112x3112 result exceeds the 16MB
@@ -187,7 +193,7 @@ the input, so PNG has no working input size there.
 ### Fast Upscale
 - Quick 4x upscaling without creative enhancement
 - Best for: Quick resolution increases
-- Input: 32x32 to 1 megapixel
+- Input: 32-1,536px per side, up to 1 megapixel
 - Fastest option, minimal processing time
 - Output scales 4x with the input, so use output_format="jpeg" or "webp" above ~256x256:
   a 1MP input yields 4096x4096, which exceeds the 16MB response limit as a PNG

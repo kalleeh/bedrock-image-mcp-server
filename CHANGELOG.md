@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Concurrent saves into a new workspace no longer lose images.** Two tools saving into the same
+  fresh workspace raced to create `output/`, and the loser failed after Bedrock had already
+  generated (and billed for) its image.
+- **`upscale_creative` now defaults to `jpeg`.** Its output is a fixed ~3150x3150, which as a PNG
+  exceeds Bedrock's 16MB response limit at every input size, so the old `png` default could
+  never succeed. The other tools keep `png` as the default.
+- **Returned `file://` URIs are percent-encoded.** A space, `#` or `?` in a saved path produced a
+  broken or truncated URI.
+- **`upscale_fast` accepts the input range AWS documents: 32-1,536px per side, up to 1MP.** A
+  shared 64px minimum rejected valid 32-63px images, and the 1,536px per-side maximum was not
+  checked. `upscale_conservative` now checks the documented 1:2.5 to 2.5:1 aspect ratio.
+- **Inpaint and remove-object accept any decodable mask.** The server rejected a mask whose size
+  differed from the image, and palette or 1-bit PNG masks. Bedrock documents that it resizes a
+  mismatched mask and places no restriction on its colour mode, so those requests now go through.
+- **Outpaint rejects a request that extends in no direction** before calling Bedrock, which
+  requires at least one of `left`, `right`, `up` or `down` to be above 0.
+- **Every documented `InvokeModel` error gets a specific message.** `ModelTimeoutException`,
+  `ModelErrorException` and `ServiceQuotaExceededException` fell through to a generic "unexpected
+  error". Throttling and 5xx messages no longer promise an SDK retry, since they are only raised
+  after the retries are used up.
+- **Image inputs no longer stall the server.** Inpaint, remove-object, style transfer, SD3.5
+  image-to-image and the three mask tools read, decode or draw images on the event loop. SD3.5
+  image-to-image now uses the same validation as the other tools, which also rejects corrupt
+  base64 that it used to accept, and no longer overwrites the caller's `image` argument.
+- **Image paths starting with `~` are expanded**, and image files over 18MB are refused before
+  being read, since they cannot fit in a Bedrock request once base64-encoded.
+- **Mask `feather` is limited to the documented 0-50**, and ellipse masks are exactly
+  2 x radius pixels across instead of one pixel larger and clipped at the right and bottom edges.
+- The README's IAM policy example was missing the Stable Image Ultra and Core model ARNs.
+
 ### Removed
 - **The Nova Canvas tools `generate_image` and `generate_image_with_colors`.** AWS retired
   Amazon Nova Canvas on 2026-09-30, and every request to it now fails with
