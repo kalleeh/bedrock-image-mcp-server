@@ -52,6 +52,11 @@ def create_test_image_base64(width=512, height=512, format='PNG'):
 class TestUpscaleCreative:
     """Tests for the upscale_creative function."""
 
+    def test_params_default_to_jpeg(self):
+        """Test the model defaults to jpeg, matching the tool, since PNG output never fits."""
+        params = CreativeUpscaleParams(image=create_test_image_base64(), prompt='p')
+        assert params.output_format is OutputFormat.JPEG
+
     @pytest.mark.asyncio
     async def test_successful_upscale(self, mock_bedrock_runtime_client, temp_workspace_dir):
         """Test successful creative upscale."""

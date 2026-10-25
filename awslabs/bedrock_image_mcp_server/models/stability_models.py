@@ -80,7 +80,7 @@ class CreativeUpscaleParams(BaseModel):
         negative_prompt: Elements to exclude from the upscaled image.
         seed: Random seed for reproducibility (0-4,294,967,294).
         style_preset: Optional style preset to apply during upscaling.
-        output_format: Output image format (jpeg, png, webp).
+        output_format: Output image format (jpeg, png, webp). Defaults to jpeg.
     """
 
     image: str
@@ -89,7 +89,8 @@ class CreativeUpscaleParams(BaseModel):
     negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH_SD35)
     seed: int = Field(default=0, ge=0, le=SD35_MAX_SEED)
     style_preset: Optional[StylePreset] = None
-    output_format: OutputFormat = OutputFormat.PNG
+    # PNG never fits: the fixed ~3150x3150 output exceeds Bedrock's 16MB response limit.
+    output_format: OutputFormat = OutputFormat.JPEG
 
 
 class ConservativeUpscaleParams(BaseModel):
