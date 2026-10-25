@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-10-25
+
+**Breaking:** the Nova Canvas tools `generate_image` and `generate_image_with_colors` are
+removed, because AWS retired the model on 2026-09-30 and every call already failed. Clients
+that still name them get "tool not found" instead of a Bedrock error; switch to
+`generate_image_sd35`, `generate_image_ultra` or `generate_image_core` in us-west-2. No other
+tool was renamed or removed. One default changed: `upscale_creative` now defaults to
+`output_format="jpeg"`, because its PNG output never fit in a Bedrock response.
+
+### Removed
+- **The Nova Canvas tools `generate_image` and `generate_image_with_colors`.** AWS retired
+  Amazon Nova Canvas on 2026-09-30, and every request to it now fails with
+  `ResourceNotFoundException: This model version has reached the end of its life`, so the two
+  tools could no longer do anything but error. The server now registers 20 tools. Use
+  `generate_image_sd35`, `generate_image_ultra` or `generate_image_core` (us-west-2) instead.
+  They have no colour-palette parameter, so name the colours in the prompt, and they return
+  one image per call, so call them again for more. The Nova request models, service module,
+  constants, prompt guide and Legacy-error guidance were removed with them.
+
+### Changed
+- **Releases are verified before publishing.** The publish workflow now refuses a release whose
+  tag does not match all three version sites (project, commitizen, `__version__`), and runs
+  lint, pyright and the test suite before building.
+- **Docker:** added a `.dockerignore`, so the build no longer copies the host's `.venv`, git
+  history and caches into the image. Removed the healthcheck, which could only ever report
+  healthy for a stdio server running as PID 1. Dependabot now keeps the GitHub Actions, base
+  image digest, `uv.lock` and `uv-requirements.txt` pins current.
+- The upscale tests now check the request sent to Bedrock and each input pixel cap; previously
+  dropping `creativity`, `style_preset` or a size cap left the suite green.
 
 ### Fixed
 - **Concurrent saves into a new workspace no longer lose images.** Two tools saving into the same
@@ -37,29 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mask `feather` is limited to the documented 0-50**, and ellipse masks are exactly
   2 x radius pixels across instead of one pixel larger and clipped at the right and bottom edges.
 - The README's IAM policy example was missing the Stable Image Ultra and Core model ARNs.
-
-### Changed
-- **Releases are verified before publishing.** The publish workflow now refuses a release whose
-  tag does not match all three version sites (project, commitizen, `__version__`), and runs
-  lint, pyright and the test suite before building.
-- **Docker:** added a `.dockerignore`, so the build no longer copies the host's `.venv`, git
-  history and caches into the image. Removed the healthcheck, which could only ever report
-  healthy for a stdio server running as PID 1. Dependabot now keeps the GitHub Actions, base
-  image digest, `uv.lock` and `uv-requirements.txt` pins current.
-- The upscale tests now check the request sent to Bedrock and each input pixel cap; previously
-  dropping `creativity`, `style_preset` or a size cap left the suite green.
-
-### Removed
-- **The Nova Canvas tools `generate_image` and `generate_image_with_colors`.** AWS retired
-  Amazon Nova Canvas on 2026-09-30, and every request to it now fails with
-  `ResourceNotFoundException: This model version has reached the end of its life`, so the two
-  tools could no longer do anything but error. The server now registers 20 tools. Use
-  `generate_image_sd35`, `generate_image_ultra` or `generate_image_core` (us-west-2) instead.
-  They have no colour-palette parameter, so name the colours in the prompt, and they return
-  one image per call, so call them again for more. The Nova request models, service module,
-  constants, prompt guide and Legacy-error guidance were removed with them.
-
-### Fixed
 - **The package no longer lists Amazon Web Services as an author.** PyPI showed "Amazon Web
   Services" in the author field, which implied an official AWS package. This is a community
   fork: Karl Wallbom is now the only listed author. The Apache 2.0 copyright headers and the
