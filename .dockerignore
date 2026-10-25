@@ -1,0 +1,13 @@
+# Keep the build context to what the image needs. Without this, COPY . /app copies the
+# host's .venv over the one built inside the image, along with git history and caches.
+.git
+.github
+.venv
+.kiro
+.DS_Store
+.coverage
+.pytest_cache
+.ruff_cache
+**/__pycache__
+dist
+tests

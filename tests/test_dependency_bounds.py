@@ -46,6 +46,15 @@ def _mcp_requirement() -> str:
     raise AssertionError('mcp is not declared in pyproject.toml dependencies')
 
 
+def _specifiers(requirement: str) -> set:
+    """Return the requirement's version clauses as (operator, version) pairs.
+
+    Comparing whole clauses rather than substrings matters: '<3' is a substring of '<30'
+    and '<3.5', and '>=2' of '>=20', so a substring check would pass a wrong bound.
+    """
+    return set(re.findall(r'(~=|==|!=|<=|>=|<|>)\s*([0-9][0-9A-Za-z.*+!-]*)', requirement))
+
+
 def _server_source() -> str:
     """Return the source of the server module that declares the mcp import site."""
     server = (
@@ -60,7 +69,7 @@ def _server_source() -> str:
 def test_mcp_dependency_has_upper_bound():
     """The mcp requirement must exclude the next major while the code targets 2.x."""
     requirement = _mcp_requirement()
-    assert '<3' in requirement, (
+    assert ('<', '3') in _specifiers(requirement), (
         f'mcp requirement {requirement!r} has no <3 ceiling. mcp 2.0 already broke this '
         'project once by deleting mcp.server.fastmcp, so an unbounded requirement lets the '
         'next major do it again to every fresh install. Drop the ceiling only together '
@@ -71,7 +80,7 @@ def test_mcp_dependency_has_upper_bound():
 def test_mcp_dependency_floor_covers_the_ported_api():
     """The floor must exclude 1.x, which has no mcp.server.mcpserver to import."""
     requirement = _mcp_requirement()
-    assert '>=2' in requirement, (
+    assert ('>=', '2') in _specifiers(requirement), (
         f'mcp requirement {requirement!r} allows 1.x, but server.py imports '
         'mcp.server.mcpserver, which only exists from 2.0 on. Installing 1.x would crash '
         'at import with ModuleNotFoundError before the server could speak protocol.'
@@ -82,7 +91,7 @@ def test_server_imports_the_api_the_bounds_pin():
     """The bounds and the import site must agree on which mcp generation is in use."""
     source = _server_source()
     imports_mcpserver = 'from mcp.server.mcpserver import' in source
-    targets_2x = '>=2' in _mcp_requirement()
+    targets_2x = ('>=', '2') in _specifiers(_mcp_requirement())
     assert imports_mcpserver == targets_2x, (
         'server.py and the mcp requirement disagree: the >=2 floor is only correct while '
         'server.py imports from mcp.server.mcpserver. Update both together.'
@@ -95,3 +104,11 @@ def test_server_does_not_import_the_removed_fastmcp_module():
         'server.py still references mcp.server.fastmcp, which does not exist in mcp 2.x. '
         'There is no compatibility shim: importing it raises ModuleNotFoundError.'
     )
+
+
+def test_specifier_parsing_compares_whole_clauses():
+    """The parser must not mistake a different bound for the one being guarded."""
+    assert _specifiers('mcp[cli]>=2,<3') == {('>=', '2'), ('<', '3')}
+    assert ('<', '3') not in _specifiers('mcp[cli]>=2,<30')
+    assert ('<', '3') not in _specifiers('mcp[cli]>=2,<3.5')
+    assert ('>=', '2') not in _specifiers('mcp[cli]>=20,<30')

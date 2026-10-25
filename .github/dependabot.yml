@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+
+  # uv-requirements.txt pins the uv used inside the Docker build, with hashes.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

@@ -8,8 +8,46 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Check the tag matches every version site
+        # The version lives in three places (project, commitizen, __version__) and has to be
+        # bumped by hand, so a release can be tagged before all three agree. Publishing is
+        # irreversible, so refuse rather than ship a wheel whose metadata disagrees with
+        # its tag.
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          commitizen=$(sed -n '/^\[tool.commitizen\]/,/^\[/p' pyproject.toml | grep -m1 '^version = ' | cut -d'"' -f2)
+          module=$(grep -m1 '^__version__ = ' awslabs/bedrock_image_mcp_server/__init__.py | cut -d"'" -f2)
+          echo "tag=$tag project=$project commitizen=$commitizen module=$module"
+          if [ "$tag" != "$project" ] || [ "$tag" != "$commitizen" ] || [ "$tag" != "$module" ]; then
+            echo "::error::Release tag v$tag does not match every version site"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint, type-check and test
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
+          uv run pytest
+
   build:
     name: Build distribution
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
