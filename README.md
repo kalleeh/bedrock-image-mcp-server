@@ -756,7 +756,7 @@ If you encounter issues not covered here:
 
 1. Check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/)
 2. Review the [Model Context Protocol specification](https://modelcontextprotocol.io/)
-3. Open an issue on the [GitHub repository](https://github.com/awslabs/mcp)
+3. Open an issue on the [GitHub repository](https://github.com/kalleeh/bedrock-image-mcp-server/issues)
 4. Check AWS service health dashboard for outages
 
 ## Development

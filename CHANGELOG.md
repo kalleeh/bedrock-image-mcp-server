@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **The package no longer lists Amazon Web Services as an author.** PyPI showed "Amazon Web
+  Services" in the author field, which implied an official AWS package. This is a community
+  fork: Karl Wallbom is now the only listed author. The Apache 2.0 copyright headers and the
+  NOTICE file still credit Amazon for the original work, as the license requires. The README's
+  support link also pointed at `awslabs/mcp`; it now points at this repository's issues.
+
 ## [0.4.1] - 2026-08-11
 
 Two user-visible fixes flagged as out of scope during the 0.4.0 port to `mcp` 2.0. No tool was
