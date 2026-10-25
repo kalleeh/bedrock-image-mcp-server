@@ -26,8 +26,6 @@ from awslabs.bedrock_image_mcp_server.consts import (
     DEFAULT_OUTPUT_DIR,
     MAX_FILENAME_LENGTH,
     MIN_IMAGE_DIMENSION,
-    NOVA_CANVAS_EOL_DATE,
-    NOVA_CANVAS_MODEL_ID,
 )
 from awslabs.bedrock_image_mcp_server.models.common import ImageGenerationResponse, OutputFormat
 from awslabs.bedrock_image_mcp_server.utils.image_utils import (
@@ -96,20 +94,12 @@ def describe_model_not_found(model_id: str, error_message: str) -> str:
         error_message: The message AWS returned.
 
     Returns:
-        The AWS message plus guidance on the likely cause and the migration path.
+        The AWS message plus guidance on the likely cause.
     """
-    if 'Legacy' in error_message and model_id == NOVA_CANVAS_MODEL_ID:
-        return (
-            f'{error_message} AWS has marked Nova Canvas as a Legacy model with end-of-life '
-            f'on {NOVA_CANVAS_EOL_DATE}, and revokes access after 15 days of inactivity. '
-            f'Use generate_image_sd35 (Stable Diffusion 3.5 Large, in us-west-2) instead, or '
-            f're-request Nova Canvas access in the Bedrock console.'
-        )
     return (
         f'{error_message} Model {model_id} could not be resolved. Check that it is available '
-        f'in the configured AWS_REGION: SD3.5 is us-west-2 only, the Stability AI services are '
-        f'in us-east-1/us-east-2/us-west-2, and Nova Canvas is in '
-        f'us-east-1/eu-west-1/ap-northeast-1.'
+        f'in the configured AWS_REGION: SD3.5, Ultra and Core are us-west-2 only, and the '
+        f'Stability AI services are in us-east-1/us-east-2/us-west-2.'
     )
 
 

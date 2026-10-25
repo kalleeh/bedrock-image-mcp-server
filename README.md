@@ -8,7 +8,7 @@
 
 > **Note:** This is a community-maintained fork of [awslabs/mcp/bedrock-image-mcp-server](https://github.com/awslabs/mcp) with additional features and improvements. Original work by Amazon Web Services under Apache 2.0 license.
 
-MCP server for generating and editing images using Amazon Nova Canvas, Stable Diffusion 3.5 Large, and Stability AI Image Services through Amazon Bedrock.
+MCP server for generating and editing images using Stable Diffusion 3.5 Large, Stable Image Ultra and Core, and Stability AI Image Services through Amazon Bedrock.
 
 ## Which model should I use?
 
@@ -40,7 +40,7 @@ different backend. Use `seed=0` for explicitly random output.
 
 ## Features
 
-### Stability AI Text-to-Image (4 tools) — recommended
+### Stability AI Text-to-Image (4 tools)
 
 #### Highest quality
 - Generate images with `generate_image_ultra` (Stable Image Ultra)
@@ -55,7 +55,7 @@ different backend. Use `seed=0` for explicitly random output.
 
 #### Balanced text-to-image generation
 - Generate images from text prompts with `generate_image_sd35`
-- Supports prompts up to 10,000 characters (vs 1,024 for Nova Canvas)
+- Supports prompts up to 10,000 characters
 - 9 aspect ratio options: 16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21
 - Superior prompt adherence and detail preservation
 - Seed support for reproducible results (0-4,294,967,294)
@@ -65,19 +65,6 @@ different backend. Use `seed=0` for explicitly random output.
 - Strength parameter (0.0-1.0) controls transformation intensity
 - Supports file paths and base64 image inputs
 - All text-to-image parameters available
-
-### Amazon Nova Canvas (2 tools)
-
-#### Text-based image generation
-- Create images from text prompts with `generate_image`
-- Customizable dimensions (320-4096px), quality options, and negative prompting
-- Supports multiple image generation (1-5) in single request
-- Adjustable parameters like cfg_scale (1.1-10.0) and seeded generation
-
-#### Color-guided image generation
-- Generate images with specific color palettes using `generate_image_with_colors`
-- Define up to 10 hex color values to influence the image style and mood
-- Same customization options as text-based generation
 
 ### Stability AI Upscale Services (3 tools)
 
@@ -203,9 +190,8 @@ Configure the MCP server in your MCP client configuration (e.g., for Amazon Q De
 > **Pick your region deliberately.** The examples below use `us-west-2`, which is also the
 > default when `AWS_REGION` is unset. It is the only region carrying the recommended
 > text-to-image models (Ultra, Core and SD3.5) and it also serves all 13 Stability
-> edit/upscale/control tools, so every tool except Nova Canvas works there. Nova Canvas is
-> *not* in us-west-2 — use `us-east-1`, `eu-west-1` or `ap-northeast-1` for that, and note it
-> retires 2026-09-30. See [Supported AWS Regions](#supported-aws-regions).
+> edit/upscale/control tools, so every tool works there. See
+> [Supported AWS Regions](#supported-aws-regions).
 
 ```json
 {
@@ -364,30 +350,6 @@ transform_image_sd35(
 )
 ```
 
-### Amazon Nova Canvas
-
-Use these when you need exact pixel dimensions, a color palette, or multiple images per request.
-
-#### Text-to-Image with Explicit Dimensions
-```python
-generate_image(
-    prompt="A serene mountain landscape at sunset",
-    width=1024,
-    height=1024
-)
-```
-
-#### Color-Guided Generation
-```python
-# Generate with specific color palette
-generate_image_with_colors(
-    prompt="A modern living room interior",
-    colors=["#2C3E50", "#ECF0F1", "#E74C3C"],
-    width=1280,
-    height=720
-)
-```
-
 ### Stability AI Upscale Services
 
 #### Creative Upscaling
@@ -539,7 +501,6 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
                 "bedrock:InvokeModel"
             ],
             "Resource": [
-                "arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0",
                 "arn:aws:bedrock:*::foundation-model/stability.sd3-5-large-v1:0",
                 "arn:aws:bedrock:*::foundation-model/us.stability.stable-creative-upscale-v1:0",
                 "arn:aws:bedrock:*::foundation-model/us.stability.stable-conservative-upscale-v1:0",
@@ -562,49 +523,41 @@ Your AWS IAM user or role needs the following permissions to use this MCP server
 
 ## Supported AWS Regions
 
-Region coverage differs sharply between the model families, and **no single region runs all of
-them**. Pick your `AWS_REGION` based on which tools you need.
+Region coverage differs between the model families. us-west-2 is the only region that runs every
+tool. Pick your `AWS_REGION` based on which tools you need.
 
 | Tools | Regions | Lifecycle |
 |---|---|---|
 | `generate_image_ultra`, `generate_image_core`, `generate_image_sd35`, `transform_image_sd35` | **us-west-2 only** | Active |
 | The 13 Stability AI upscale / edit / control tools | us-east-1, us-east-2, us-west-2 | Active |
 | `create_rectangular_mask`, `create_ellipse_mask`, `create_full_mask` | Any — these run locally and never call Bedrock | Active |
-| `generate_image`, `generate_image_with_colors` (Nova Canvas) | us-east-1, eu-west-1, ap-northeast-1 | **Legacy — EOL 2026-09-30** |
 
 Practical consequences:
 
-- **us-west-2** is the default, and the only region where all 20 non-Nova tools work: the four
+- **us-west-2** is the default, and the only region where all 20 tools work: the four
   SD3.5/Ultra/Core tools, all 13 Stability edit/upscale/control tools, and the 3 local mask
-  helpers. Nova Canvas is the only thing missing.
+  helpers.
 - **us-east-1 and us-east-2** are strict subsets — identical to each other in image-model
-  coverage, and missing all four text-to-image tools. us-east-1 adds only Nova Canvas, which
-  retires 2026-09-30; after that it offers nothing us-west-2 does not.
-- If you need both SD3.5 and Nova Canvas before the EOL date, run two server instances with
-  different `AWS_REGION` values.
+  coverage, and missing all four text-to-image tools.
 
 The Stability AI tools are invoked through US Geo cross-region inference profiles (their model
 IDs carry a `us.` prefix), so a request sent to any of the three regions may be served from
 another one. The underlying in-region model IDs are not enabled for direct on-demand use.
 
-### Nova Canvas is retiring
+### Nova Canvas was removed
 
-AWS moved Nova Canvas to **Legacy on 2026-03-30, with end-of-life on 2026-09-30**. After that
-date the two Nova tools will stop working. AWS also restricts Legacy models in ways that bite
-before then:
-
-- New customers cannot start using a Legacy model at all
-- Existing customers **may lose access after 15 days of inactivity**, which surfaces as
-  `ResourceNotFoundException` (see [Troubleshooting](#this-model-is-marked-by-provider-as-legacy-nova-canvas))
-
-If you rely on Nova Canvas today, plan to move to `generate_image_sd35` in us-west-2.
+AWS retired Amazon Nova Canvas on 2026-09-30, and every request to it now fails, so version
+0.5.0 removed the `generate_image` and `generate_image_with_colors` tools. Use
+`generate_image_sd35` (or `generate_image_ultra` / `generate_image_core`) in us-west-2 instead.
+There is no colour-palette parameter on these models: name the colours in the prompt. For
+several images, call the tool several times.
 
 **Note**: verified against both the Bedrock API (`GetFoundationModel` lifecycle status) and the
 AWS model cards. Availability changes, so check your own region with:
 
 ```bash
 aws bedrock list-foundation-models --region us-west-2 \
-  --query "modelSummaries[?contains(modelId,'stability') || contains(modelId,'nova-canvas')].[modelId,modelLifecycle.status]"
+  --query "modelSummaries[?contains(modelId,'stability')].[modelId,modelLifecycle.status]"
 ```
 
 See the AWS [regional availability by model](https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html)
@@ -628,24 +581,6 @@ pages for the authoritative lists.
    - Request access for the models you want to use
    - Wait for approval (usually instant for most models)
 3. Verify your IAM permissions include `bedrock:InvokeModel` for the specific model ARN
-
-#### "This Model is marked by provider as Legacy" (Nova Canvas)
-
-**Problem**: `generate_image` or `generate_image_with_colors` fails with
-`ResourceNotFoundException: Access denied. This Model is marked by provider as Legacy and you
-have not been actively using the model in the last 30 days.`
-
-**Cause**: AWS moved Nova Canvas to Legacy on 2026-03-30, with **end-of-life on 2026-09-30**.
-Per the AWS model lifecycle policy, existing customers may lose access to a Legacy model after
-**15 days of inactivity**, and new customers cannot use it at all. Previously granted model
-access does not exempt you.
-
-**Solutions**:
-- Prefer `generate_image_sd35` in us-west-2. This is the recommended text-to-image tool and is
-  Active, so it is the migration path rather than a workaround.
-- To keep using Nova Canvas before EOL, re-request access in the Bedrock console and invoke it
-  at least once every 15 days.
-- Note that after 2026-09-30 the two Nova tools will stop working regardless.
 
 #### "Response payload size exceeds limit" (all three upscale tools)
 
@@ -680,7 +615,6 @@ PNG work there.
 **Problem**: Image generation fails with dimension validation errors.
 
 **Solutions**:
-- **Nova Canvas**: Ensure dimensions are between 320-4096 pixels and divisible by 16
 - **SD3.5**: Use one of the supported aspect ratios (16:9, 1:1, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21)
 - **Upscale services**: Check input image size constraints:
   - Creative/Fast: 64x64 to 1MP
@@ -738,7 +672,6 @@ PNG work there.
    - AWS region latency
 2. Use `upscale_fast` instead of creative upscaling for faster results
 3. Consider using a closer AWS region
-4. For Nova Canvas, reduce `number_of_images` parameter
 
 #### File path issues
 

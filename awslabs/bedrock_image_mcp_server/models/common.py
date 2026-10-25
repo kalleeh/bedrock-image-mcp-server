@@ -36,7 +36,6 @@ class BedrockModelId(str, Enum):
     """Bedrock model identifiers for all supported image generation models.
 
     Attributes:
-        NOVA_CANVAS: Amazon Nova Canvas model.
         SD35_LARGE: Stable Diffusion 3.5 Large model.
         STABLE_UPSCALE_CREATIVE: Stability AI creative upscale model.
         STABLE_UPSCALE_CONSERVATIVE: Stability AI conservative upscale model.
@@ -53,7 +52,6 @@ class BedrockModelId(str, Enum):
         STABLE_STYLE_TRANSFER: Stability AI style transfer model.
     """
 
-    NOVA_CANVAS = 'amazon.nova-canvas-v1:0'
     SD35_LARGE = 'stability.sd3-5-large-v1:0'
     STABLE_UPSCALE_CREATIVE = 'us.stability.stable-creative-upscale-v1:0'
     STABLE_UPSCALE_CONSERVATIVE = 'us.stability.stable-conservative-upscale-v1:0'
@@ -93,3 +91,13 @@ class ImageGenerationResponse(BaseModel):
     prompt: Optional[str] = None
     seed: Optional[int] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class McpImageGenerationResponse(BaseModel):
+    """Response from image generation API for MCP tools.
+
+    This model represents the response returned to MCP clients.
+    """
+
+    status: str
+    paths: List[str]

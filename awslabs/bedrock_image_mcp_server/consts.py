@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Constants
-NOVA_CANVAS_MODEL_ID = 'amazon.nova-canvas-v1:0'
 SD35_LARGE_MODEL_ID = 'stability.sd3-5-large-v1:0'
 STABLE_IMAGE_ULTRA_MODEL_ID = 'stability.stable-image-ultra-v1:1'
 STABLE_IMAGE_CORE_MODEL_ID = 'stability.stable-image-core-v1:1'
-
-# AWS marked Nova Canvas Legacy on 2026-03-30; it stops serving requests after this date.
-NOVA_CANVAS_EOL_DATE = '2026-09-30'
 
 # Stability AI Upscale Model IDs
 STABLE_UPSCALE_CREATIVE_MODEL_ID = 'us.stability.stable-creative-upscale-v1:0'
@@ -39,12 +35,7 @@ STABLE_CONTROL_STRUCTURE_MODEL_ID = 'us.stability.stable-image-control-structure
 STABLE_STYLE_GUIDE_MODEL_ID = 'us.stability.stable-image-style-guide-v1:0'
 STABLE_STYLE_TRANSFER_MODEL_ID = 'us.stability.stable-style-transfer-v1:0'
 
-# Nova Canvas defaults
-DEFAULT_WIDTH = 1024
-DEFAULT_HEIGHT = 1024
-DEFAULT_QUALITY = 'standard'
-DEFAULT_CFG_SCALE = 6.5
-DEFAULT_NUMBER_OF_IMAGES = 1
+# Output file defaults
 DEFAULT_OUTPUT_DIR = 'output'  # Default directory inside workspace_dir
 MAX_FILENAME_LENGTH = 100  # Leaves room for the random suffix and extension within NAME_MAX
 
@@ -52,9 +43,7 @@ MAX_FILENAME_LENGTH = 100  # Leaves room for the random suffix and extension wit
 DEFAULT_SD35_ASPECT_RATIO = '1:1'
 DEFAULT_SD35_SEED = 0
 MAX_PROMPT_LENGTH_SD35 = 10000
-MAX_PROMPT_LENGTH_NOVA = 1024
 SD35_MAX_SEED = 4294967294
-NOVA_MAX_SEED = 858993459
 
 # Upscale defaults
 DEFAULT_CREATIVE_UPSCALE_CREATIVITY = 0.3
@@ -96,69 +85,15 @@ BEDROCK_MAX_POOL_CONNECTIONS = 50  # Connection pool size for concurrent request
 STDIN_EOF_GRACE_SECONDS = 150
 
 
-# Nova Canvas Prompt Best Practices
-PROMPT_INSTRUCTIONS = """
-# Amazon Nova Canvas Prompting Best Practices
-
-## General Guidelines
-
-- Prompts must be no longer than 1024 characters. For very long prompts, place the least important details near the end.
-- Do not use negation words like "no", "not", "without" in your prompt. The model doesn't understand negation and will result in the opposite of what you intend.
-- Use negative prompts (via the `negative_prompt` parameter) to specify objects or characteristics to exclude from the image.
-- Omit negation words from your negative prompts as well.
-
-## Effective Prompt Structure
-
-An effective prompt often includes short descriptions of:
-
-1. The subject
-2. The environment
-3. (optional) The position or pose of the subject
-4. (optional) Lighting description
-5. (optional) Camera position/framing
-6. (optional) The visual style or medium ("photo", "illustration", "painting", etc.)
-
-## Refining Results
-
-When the output is close to what you want but not perfect:
-
-1. Use a consistent `seed` value and make small changes to your prompt or negative prompt.
-2. Once the prompt is refined, generate more variations using the same prompt but different `seed` values.
-
-## Examples
-
-### Example 1: Stock Photo
-**Prompt:** "realistic editorial photo of female teacher standing at a blackboard with a warm smile"
-**Negative Prompt:** "crossed arms"
-
-### Example 2: Story Illustration
-**Prompt:** "whimsical and ethereal soft-shaded story illustration: A woman in a large hat stands at the ship's railing looking out across the ocean"
-**Negative Prompt:** "clouds, waves"
-
-### Example 3: Pre-visualization for TV/Film
-**Prompt:** "drone view of a dark river winding through a stark Iceland landscape, cinematic quality"
-
-### Example 4: Fashion/Editorial Content
-**Prompt:** "A cool looking stylish man in an orange jacket, dark skin, wearing reflective glasses. Shot from slightly low angle, face and chest in view, aqua blue sleek building shapes in background."
-
-## Using Negative Prompts
-
-Negative prompts can be surprisingly useful. Use them to exclude objects or style characteristics that might otherwise naturally occur as a result of your main prompt.
-
-For example, adding "waves, clouds" as a negative prompt to a ship scene will result in a cleaner, more minimal composition.
-"""
-
-
 # Stable Diffusion 3.5 Large Prompt Best Practices
 SD35_PROMPT_INSTRUCTIONS = """
 # Stable Diffusion 3.5 Large Prompting Best Practices
 
-## Key Differences from Nova Canvas
+## Key Features
 
-- Supports up to 10,000 characters (vs 1,024 for Nova)
-- Better prompt adherence and detail preservation
+- Supports up to 10,000 characters
+- Strong prompt adherence and detail preservation
 - Supports aspect ratios instead of explicit dimensions
-- No quality or cfg_scale parameters
 
 ## Effective Prompting
 
@@ -166,7 +101,7 @@ SD35_PROMPT_INSTRUCTIONS = """
 - Use aspect ratios appropriate for your use case (16:9 for landscapes, 9:16 for portraits, etc.)
 - Leverage negative prompts to exclude unwanted elements
 - Use seeds for reproducible results
-- Unlike Nova Canvas, SD3.5 can handle longer, more detailed prompts effectively
+- SD3.5 handles long, detailed prompts effectively
 
 ## Image-to-Image Tips
 

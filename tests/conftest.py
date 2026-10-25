@@ -18,7 +18,7 @@ import json
 import pytest
 import tempfile
 from loguru import logger
-from typing import Dict, Generator, List
+from typing import Generator, List
 from unittest.mock import AsyncMock, MagicMock
 
 
@@ -47,50 +47,6 @@ def mock_bedrock_runtime_client() -> MagicMock:
 
     mock_client.invoke_model.return_value = mock_response
     return mock_client
-
-
-@pytest.fixture
-def sample_text_prompt() -> str:
-    """Return a sample text prompt for testing."""
-    return 'A beautiful mountain landscape with a lake and trees'
-
-
-@pytest.fixture
-def sample_negative_prompt() -> str:
-    """Return a sample negative prompt for testing."""
-    return 'people, anatomy, hands, low quality, low resolution, low detail'
-
-
-@pytest.fixture
-def sample_colors() -> List[str]:
-    """Return a sample list of colors for testing."""
-    return ['#FF5733', '#33FF57', '#3357FF']
-
-
-@pytest.fixture
-def sample_base64_images() -> List[str]:
-    """Return a list of sample base64-encoded images for testing."""
-    return [
-        base64.b64encode(b'mock_image_data_1').decode('utf-8'),
-        base64.b64encode(b'mock_image_data_2').decode('utf-8'),
-    ]
-
-
-@pytest.fixture
-def mock_successful_response() -> Dict:
-    """Return a mock successful response from the Nova Canvas API."""
-    return {
-        'images': [
-            base64.b64encode(b'mock_image_data_1').decode('utf-8'),
-            base64.b64encode(b'mock_image_data_2').decode('utf-8'),
-        ]
-    }
-
-
-@pytest.fixture
-def mock_error_response() -> Dict:
-    """Return a mock error response from the Nova Canvas API."""
-    return {'error': 'An error occurred during image generation'}
 
 
 @pytest.fixture
